@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Nexo">
+  <defs>
+    <linearGradient id="nexo-mark-gradient" x1="28" x2="100" y1="24" y2="104" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2563eb" />
+      <stop offset="0.5" stop-color="#4f46e5" />
+      <stop offset="1" stop-color="#7c3aed" />
+    </linearGradient>
+  </defs>
+  <path
+    d="M64 29v70M64 64 32 46M64 64l32-18M64 64 32 82M64 64l32 18"
+    fill="none"
+    stroke="url(#nexo-mark-gradient)"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="10"
+  />
+  <circle cx="64" cy="29" r="10" fill="#ffffff" stroke="url(#nexo-mark-gradient)" stroke-width="7" />
+  <circle cx="32" cy="46" r="9" fill="#ffffff" stroke="url(#nexo-mark-gradient)" stroke-width="6.5" />
+  <circle cx="96" cy="46" r="9" fill="#ffffff" stroke="url(#nexo-mark-gradient)" stroke-width="6.5" />
+  <circle cx="32" cy="82" r="9" fill="#ffffff" stroke="url(#nexo-mark-gradient)" stroke-width="6.5" />
+  <circle cx="96" cy="82" r="9" fill="#ffffff" stroke="url(#nexo-mark-gradient)" stroke-width="6.5" />
+  <circle cx="64" cy="99" r="10" fill="#ffffff" stroke="url(#nexo-mark-gradient)" stroke-width="7" />
+</svg>

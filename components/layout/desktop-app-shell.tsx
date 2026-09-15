@@ -10,6 +10,7 @@ import {
   Search,
   Timer,
 } from "lucide-react";
+import Image from "next/image";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,8 +22,8 @@ export function DesktopAppShell() {
       <aside className="fixed inset-y-0 left-0 z-30 flex w-64 flex-col justify-between bg-[var(--surface)] p-4 shadow-[6px_0_16px_var(--shadow-dark-soft)]">
         <div className="space-y-6">
           <div className="flex items-center gap-3 px-2 pt-2">
-            <div className="nexo-surface flex h-10 w-10 items-center justify-center rounded-2xl text-[var(--primary)]">
-              <span className="font-display text-lg font-black">N</span>
+            <div className="nexo-surface flex h-10 w-10 items-center justify-center rounded-2xl">
+              <Image alt="Nexo" height={24} src="/icons/nexo-mark.svg" width={24} />
             </div>
             <div>
               <p className="font-display text-2xl font-bold leading-none text-[var(--primary)]">Nexo</p>

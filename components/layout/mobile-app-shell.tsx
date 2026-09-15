@@ -1,4 +1,5 @@
 import { Bell, CheckCircle2, FileText, Plus, Search, Timer } from "lucide-react";
+import Image from "next/image";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -9,8 +10,8 @@ export function MobileAppShell() {
     <div className="mx-auto flex min-h-screen max-w-[420px] flex-col bg-[var(--background)] pb-28 text-[var(--foreground)]">
       <header className="safe-top sticky top-0 z-30 flex h-20 items-center justify-between bg-[var(--surface)] px-4 shadow-[0_4px_16px_var(--shadow-dark-soft)]">
         <div className="flex items-center gap-3">
-          <div className="nexo-surface-sm flex h-10 w-10 items-center justify-center rounded-full bg-[var(--primary-soft)] text-sm font-bold text-[var(--primary-strong)]">
-            AC
+          <div className="nexo-surface-sm flex h-10 w-10 items-center justify-center rounded-2xl bg-white">
+            <Image alt="Nexo" height={24} src="/icons/nexo-mark.svg" width={24} />
           </div>
           <p className="font-display text-2xl font-bold tracking-normal text-[var(--primary)]">Nexo</p>
         </div>

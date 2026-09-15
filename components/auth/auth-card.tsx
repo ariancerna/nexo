@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ArrowLeft, Mail, Sparkles } from "lucide-react";
+import Image from "next/image";
+import { ArrowLeft, Mail } from "lucide-react";
 
 import { signInWithGoogle } from "@/app/auth/actions";
 import { Input } from "@/components/ui/input";
@@ -28,10 +29,10 @@ export function AuthCard({ title, subtitle, message, children, footer, showGoogl
           Volver a Nexo
         </Link>
 
-        <div className="nexo-floating rounded-[28px] border border-[var(--border)] p-5 sm:p-7">
+        <div className="nexo-floating rounded-[28px] p-5 sm:p-7">
           <div className="mb-6 text-center">
-            <div className="nexo-surface-sm mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl text-[var(--primary)]">
-              <Sparkles className="h-6 w-6" />
+            <div className="nexo-surface-sm mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl">
+              <Image alt="Nexo" height={28} src="/icons/nexo-mark.svg" width={28} />
             </div>
             <p className="font-display text-3xl font-bold text-[var(--primary)]">Nexo</p>
             <h1 className="mt-4 font-display text-2xl font-bold leading-tight">{title}</h1>
