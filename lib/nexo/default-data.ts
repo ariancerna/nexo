@@ -136,6 +136,7 @@ export const defaultNexoData: NexoData = {
       name: "README_v2.md",
       size: 32768,
       type: "text/markdown",
+      storagePath: null,
       spaceId: "space-code",
       isFavorite: false,
       isTrashed: false,
@@ -164,12 +165,14 @@ export const defaultNexoData: NexoData = {
   },
 };
 
-export function createId(prefix: string) {
+export function createId(_prefix: string) {
+  void _prefix;
+
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return `${prefix}-${crypto.randomUUID()}`;
+    return crypto.randomUUID();
   }
 
-  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 export function formatBytes(bytes: number) {

@@ -91,6 +91,7 @@ export type DriveFile = {
   name: string;
   size: number;
   type: string;
+  storagePath: string | null;
   spaceId: string | null;
   isFavorite: boolean;
   isTrashed: boolean;

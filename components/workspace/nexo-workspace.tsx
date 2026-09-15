@@ -32,7 +32,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { useNexoData } from "@/hooks/use-nexo-data";
+import { useNexoData, type NexoSyncStatus } from "@/hooks/use-nexo-data";
 import { createId, formatBytes } from "@/lib/nexo/default-data";
 import type {
   CalendarEvent,
@@ -128,7 +128,7 @@ function countActiveModules(data: NexoData) {
 }
 
 export function NexoWorkspace() {
-  const { data, ready, setData, resetData } = useNexoData();
+  const { data, ready, syncStatus, syncMessage, setData, resetData, uploadDriveFiles } = useNexoData();
   const [activeModule, setActiveModule] = useState<ModuleKey>("dashboard");
   const [query, setQuery] = useState("");
   const [online, setOnline] = useState(true);
@@ -436,22 +436,12 @@ export function NexoWorkspace() {
     form.reset();
   };
 
-  const addDriveFiles = (files: FileList | null) => {
+  const addDriveFiles = async (files: FileList | null) => {
     if (!files?.length) {
       return;
     }
 
-    const createdAt = new Date().toISOString();
-    const nextFiles: DriveFile[] = Array.from(files).map((file) => ({
-      id: createId("file"),
-      name: file.name,
-      size: file.size,
-      type: file.type || "application/octet-stream",
-      spaceId: null,
-      isFavorite: false,
-      isTrashed: false,
-      createdAt,
-    }));
+    const nextFiles = await uploadDriveFiles(files);
 
     setData((current) => ({ ...current, driveFiles: [...nextFiles, ...current.driveFiles] }));
   };
@@ -604,7 +594,7 @@ export function NexoWorkspace() {
           </section>
         </div>
 
-        <ProfileFooter online={online} />
+        <ProfileFooter online={online} syncMessage={syncMessage} syncStatus={syncStatus} />
       </aside>
 
       <header className="safe-top sticky top-0 z-30 flex items-center justify-between bg-[color-mix(in_srgb,var(--surface)_90%,transparent)] px-4 py-3 shadow-[0_4px_12px_var(--shadow-dark-soft)] backdrop-blur-md lg:ml-64 lg:px-8">
@@ -612,9 +602,7 @@ export function NexoWorkspace() {
           <h1 className="truncate font-display text-xl font-bold lg:text-2xl">
             {modules.find((module) => module.key === activeModule)?.label ?? "Nexo"}
           </h1>
-          <p className="hidden text-sm text-[var(--muted)] sm:block">
-            {online ? "Sincronizado localmente" : "Modo sin conexión"}
-          </p>
+          <p className="hidden text-sm text-[var(--muted)] sm:block">{online ? syncMessage : "Modo sin conexión"}</p>
         </div>
 
         <div className="flex items-center gap-2 lg:gap-3">
@@ -766,7 +754,24 @@ export function NexoWorkspace() {
   );
 }
 
-function ProfileFooter({ online }: { online: boolean }) {
+function ProfileFooter({
+  online,
+  syncMessage,
+  syncStatus,
+}: {
+  online: boolean;
+  syncMessage: string;
+  syncStatus: NexoSyncStatus;
+}) {
+  const statusLabel =
+    syncStatus === "synced"
+      ? "Supabase activo"
+      : syncStatus === "syncing" || syncStatus === "loading"
+        ? "Sincronizando"
+        : syncStatus === "error"
+          ? "Revisar sync"
+          : "Modo local";
+
   return (
     <div className="space-y-3 border-t border-[var(--surface-container)] pt-4">
       <div className="nexo-surface flex items-center justify-between rounded-3xl p-3">
@@ -776,9 +781,12 @@ function ProfileFooter({ online }: { online: boolean }) {
           </div>
           <div>
             <p className="text-sm font-bold">Arian Cerna</p>
-            <p className="text-xs text-[var(--muted-soft)]">{online ? "En línea" : "Sin conexión"}</p>
+            <p className="text-xs text-[var(--muted-soft)]">{online ? statusLabel : "Sin conexión"}</p>
           </div>
         </div>
+      </div>
+      <div className="nexo-inset rounded-2xl px-3 py-2 text-xs font-bold text-[var(--primary)]">
+        {online ? syncMessage : "Cambios guardados offline"}
       </div>
     </div>
   );
@@ -798,7 +806,7 @@ function SearchPanel({
       <div className="flex items-center justify-between">
         <div>
           <CardTitle>Búsqueda global</CardTitle>
-          <CardDescription>Resultados guardados localmente en tu espacio.</CardDescription>
+          <CardDescription>Resultados sincronizados en tu espacio.</CardDescription>
         </div>
         <Button onClick={onClear} size="sm">
           Cerrar
@@ -939,7 +947,7 @@ function DashboardView({
           <CardHeader>
             <div>
               <CardTitle>Drive</CardTitle>
-              <CardDescription>Metadata local lista para Supabase Storage.</CardDescription>
+            <CardDescription>Archivos y metadata sincronizados con Supabase Storage.</CardDescription>
             </div>
             <Button onClick={() => onNavigate("drive")} size="sm">
               Subir
@@ -1150,19 +1158,33 @@ function TaskRow({ task }: { task: Task }) {
   );
 }
 
-function DriveView({ driveFiles, onUpload }: { driveFiles: DriveFile[]; onUpload: (files: FileList | null) => void }) {
+function DriveView({
+  driveFiles,
+  onUpload,
+}: {
+  driveFiles: DriveFile[];
+  onUpload: (files: FileList | null) => Promise<void>;
+}) {
   return (
     <div className="space-y-6">
       <Card className="p-5">
         <CardHeader>
           <div>
             <CardTitle>Drive</CardTitle>
-            <CardDescription>Sube archivos para registrar metadata local. Supabase Storage se conectará después.</CardDescription>
+            <CardDescription>Sube archivos al bucket privado de Supabase y guarda su metadata en tu workspace.</CardDescription>
           </div>
           <label className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-2xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary-foreground)] nexo-primary-shadow">
             <Upload className="h-4 w-4" />
             Subir archivo
-            <input className="sr-only" multiple onChange={(event) => onUpload(event.target.files)} type="file" />
+            <input
+              className="sr-only"
+              multiple
+              onChange={(event) => {
+                void onUpload(event.target.files);
+                event.currentTarget.value = "";
+              }}
+              type="file"
+            />
           </label>
         </CardHeader>
       </Card>
@@ -1173,6 +1195,9 @@ function DriveView({ driveFiles, onUpload }: { driveFiles: DriveFile[]; onUpload
             <h2 className="mt-4 truncate font-display text-lg font-bold">{file.name}</h2>
             <p className="mt-2 text-sm text-[var(--muted)]">{formatBytes(file.size)}</p>
             <p className="text-xs text-[var(--muted-soft)]">{file.type}</p>
+            <p className="mt-2 truncate text-xs text-[var(--muted-soft)]">
+              {file.storagePath ? "Supabase Storage" : "Metadata local"}
+            </p>
           </Card>
         ))}
       </div>
@@ -1516,7 +1541,7 @@ function SettingsView({
           <CardHeader>
             <div>
               <CardTitle>Apariencia</CardTitle>
-              <CardDescription>Preferencias visuales guardadas localmente.</CardDescription>
+              <CardDescription>Preferencias visuales sincronizadas con Supabase.</CardDescription>
             </div>
           </CardHeader>
           <div className="mt-5 space-y-5">
@@ -1588,8 +1613,8 @@ function SettingsView({
       <Card className="p-5">
         <CardHeader>
           <div>
-            <CardTitle>Datos locales</CardTitle>
-            <CardDescription>Esto restablece los datos de ejemplo guardados en este navegador.</CardDescription>
+            <CardTitle>Datos del workspace</CardTitle>
+            <CardDescription>Esto restablece los datos de ejemplo y sincroniza el cambio con Supabase.</CardDescription>
           </div>
           <Button onClick={onReset}>Restablecer datos</Button>
         </CardHeader>
