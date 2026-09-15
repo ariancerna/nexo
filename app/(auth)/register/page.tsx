@@ -31,12 +31,12 @@ export default async function RegisterPage({
       <form action={signUpWithPassword} className="space-y-4">
         <label className="block space-y-2">
           <span className="text-sm font-bold">Nombre</span>
-          <Input autoComplete="name" name="fullName" placeholder="Arian Cerna" />
+          <Input autoComplete="name" className="auth-input" name="fullName" placeholder="Arian Cerna" />
         </label>
         <EmailField />
         <label className="block space-y-2">
           <span className="text-sm font-bold">Contraseña</span>
-          <Input autoComplete="new-password" minLength={8} name="password" required type="password" />
+          <Input autoComplete="new-password" className="auth-input" minLength={8} name="password" required type="password" />
         </label>
         <Button className="w-full" type="submit" variant="primary">
           Crear cuenta

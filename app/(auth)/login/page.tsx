@@ -32,7 +32,7 @@ export default async function LoginPage({
         <EmailField />
         <label className="block space-y-2">
           <span className="text-sm font-bold">Contraseña</span>
-          <Input autoComplete="current-password" name="password" required type="password" />
+          <Input autoComplete="current-password" className="auth-input" name="password" required type="password" />
         </label>
         <div className="flex items-center justify-between text-sm">
           <Link className="font-semibold text-[var(--primary)]" href="/forgot-password">

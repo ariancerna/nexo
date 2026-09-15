@@ -22,6 +22,19 @@ async function getSiteUrl() {
   return process.env.NEXT_PUBLIC_SITE_URL ?? headersList.get("origin") ?? "http://localhost:3000";
 }
 
+async function providerEndpointIsReady(providerUrl: string) {
+  try {
+    const response = await fetch(providerUrl, {
+      cache: "no-store",
+      redirect: "manual",
+    });
+
+    return response.status < 400;
+  } catch {
+    return true;
+  }
+}
+
 export async function signInWithPassword(formData: FormData) {
   requireBackend();
 
@@ -89,6 +102,15 @@ export async function signInWithGoogle() {
 
   if (error || !providerUrl) {
     authRedirect(authRoutes.login, "No pudimos abrir Google OAuth. Revisa la configuración en Supabase.");
+  }
+
+  const providerReady = await providerEndpointIsReady(providerUrl);
+
+  if (!providerReady) {
+    authRedirect(
+      authRoutes.login,
+      "Google OAuth aún no está activo en Supabase. Activa el provider Google con Client ID y Secret.",
+    );
   }
 
   redirect(providerUrl);
