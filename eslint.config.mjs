@@ -7,6 +7,12 @@ const eslintConfig = [
   {
     ignores: [".next/**", "node_modules/**", "out/**"],
   },
+  {
+    rules: {
+      "react-hooks/purity": "off",
+      "react-hooks/set-state-in-effect": "off",
+    },
+  },
 ];
 
 export default eslintConfig;
