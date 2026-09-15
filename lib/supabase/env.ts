@@ -1,17 +1,28 @@
 type SupabasePublicEnv = {
   url: string;
-  anonKey: string;
+  publishableKey: string;
 };
 
-export function getSupabasePublicEnv(): SupabasePublicEnv {
+export function getOptionalSupabasePublicEnv(): SupabasePublicEnv | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const publishableKey =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (!url || !anonKey) {
+  if (!url || !publishableKey) {
+    return null;
+  }
+
+  return { url, publishableKey };
+}
+
+export function getSupabasePublicEnv(): SupabasePublicEnv {
+  const env = getOptionalSupabasePublicEnv();
+
+  if (!env) {
     throw new Error(
-      "Faltan NEXT_PUBLIC_SUPABASE_URL o NEXT_PUBLIC_SUPABASE_ANON_KEY. Revisa .env.example.",
+      "Faltan NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY. Revisa .env.example.",
     );
   }
 
-  return { url, anonKey };
+  return env;
 }
