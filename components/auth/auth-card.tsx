@@ -18,8 +18,8 @@ export function AuthCard({ title, subtitle, message, children, footer, showGoogl
   const backendReady = Boolean(getOptionalSupabasePublicEnv());
 
   return (
-    <main className="auth-shell min-h-screen px-4 py-6 text-[var(--foreground)] sm:px-6 lg:px-8">
-      <section className="auth-panel mx-auto w-full">
+    <main className="grid min-h-screen place-items-center bg-[var(--background)] px-4 py-6 text-[var(--foreground)] sm:px-6 lg:px-8">
+      <section className="mx-auto flex w-full max-w-[420px] flex-col">
         <Link
           className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-[var(--muted)] transition hover:text-[var(--primary)]"
           href="/"
@@ -28,9 +28,9 @@ export function AuthCard({ title, subtitle, message, children, footer, showGoogl
           Volver a Nexo
         </Link>
 
-        <div className="auth-card rounded-[28px] p-5 sm:p-7">
+        <div className="nexo-floating rounded-[28px] border border-[var(--border)] p-5 sm:p-7">
           <div className="mb-6 text-center">
-            <div className="auth-mark mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl text-[var(--primary)]">
+            <div className="nexo-surface-sm mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl text-[var(--primary)]">
               <Sparkles className="h-6 w-6" />
             </div>
             <p className="font-display text-3xl font-bold text-[var(--primary)]">Nexo</p>
@@ -53,7 +53,11 @@ export function AuthCard({ title, subtitle, message, children, footer, showGoogl
           {showGoogle ? (
             <>
               <form action={signInWithGoogle}>
-                <button className="auth-google-button" disabled={!backendReady} type="submit">
+                <button
+                  className="inline-flex min-h-11 w-full items-center justify-center gap-3 rounded-2xl border border-[#dadce0] bg-white px-4 py-2 text-sm font-bold text-[#1f1f1f] shadow-[0_1px_2px_rgba(60,64,67,0.18)] transition hover:bg-[#f8fafd] hover:shadow-[0_2px_5px_rgba(60,64,67,0.24)] active:translate-y-px disabled:pointer-events-none disabled:opacity-50"
+                  disabled={!backendReady}
+                  type="submit"
+                >
                   <GoogleLogo />
                   Continuar con Google
                 </button>
