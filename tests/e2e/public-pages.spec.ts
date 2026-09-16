@@ -34,6 +34,8 @@ test("landing hero fills the viewport and keeps its content over the image", asy
   await expect(hero).toBeVisible();
   await expect(image).toBeVisible();
   await expect(content).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Nexo para organizar tu vida digital con calma y estructura." })).toBeVisible();
+  await expect(page.getByText("nexo.app/inicio")).toBeVisible();
 
   const [heroBox, imageBox, contentBox] = await Promise.all([
     hero.boundingBox(),
@@ -62,6 +64,7 @@ test("login presents a centered form and white provider buttons", async ({ page 
   await expect(microsoftButton).toBeVisible();
   await expect(googleButton).toHaveCSS("background-color", "rgb(255, 255, 255)");
   await expect(microsoftButton).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await expect(page.getByRole("link", { name: "Volver al inicio" })).toBeVisible();
 
   const box = await card.boundingBox();
   const viewport = page.viewportSize();

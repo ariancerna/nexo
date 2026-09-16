@@ -4,30 +4,46 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTheme } from "next-themes";
 import Image from "next/image";
 import {
+  BadgeDollarSign,
+  Bell,
   Bookmark,
+  BookOpen,
   BriefcaseBusiness,
   CalendarDays,
+  Camera,
   Check,
   CheckCircle2,
   Circle,
   Code2,
   Dumbbell,
   ExternalLink,
+  Factory,
   FileText,
+  Film,
   FolderOpen,
+  Gamepad2,
+  Gift,
   GraduationCap,
   Heart,
   Home,
+  Landmark,
+  Leaf,
   ListChecks,
   Lightbulb,
   LogOut,
+  Map,
+  Mic2,
   Moon,
+  Music2,
   Pause,
   Palette,
+  Plane,
   Play,
   Plus,
+  Rocket,
   RotateCcw,
   Search,
+  ShoppingBag,
   Settings,
   Sparkles,
   Star,
@@ -35,6 +51,10 @@ import {
   Timer,
   Trash2,
   Upload,
+  UserRound,
+  Utensils,
+  UsersRound,
+  WalletCards,
 } from "lucide-react";
 
 import { signOut } from "@/app/auth/actions";
@@ -45,6 +65,12 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 import { Input } from "@/components/ui/input";
 import { FeedbackDialog, type FeedbackDialogState } from "@/components/ui/feedback-dialog";
 import { Switch } from "@/components/ui/switch";
+import {
+  buildWorkspaceNotifications,
+  NotificationsPanel,
+  type WorkspaceNotification,
+} from "@/components/workspace/notifications-panel";
+import { ProfileView } from "@/components/workspace/profile-view";
 import { useNexoData, type NexoSyncStatus } from "@/hooks/use-nexo-data";
 import { createId, formatBytes } from "@/lib/nexo/default-data";
 import type {
@@ -72,6 +98,7 @@ const modules: Array<{ key: ModuleKey; label: string; icon: typeof Home }> = [
   { key: "saved", label: "Guardados", icon: Bookmark },
   { key: "lists", label: "Listas", icon: ListChecks },
   { key: "focus", label: "Focus", icon: Timer },
+  { key: "profile", label: "Perfil", icon: UserRound },
   { key: "settings", label: "Ajustes", icon: Settings },
 ];
 
@@ -89,6 +116,24 @@ const spaceIconOptions = [
   { value: "fitness", label: "Ejercicio", icon: Dumbbell, aliases: ["🏋️"] },
   { value: "creative", label: "Creatividad", icon: Palette, aliases: ["🎨"] },
   { value: "ideas", label: "Ideas", icon: Lightbulb, aliases: ["💡"] },
+  { value: "finance", label: "Finanzas", icon: BadgeDollarSign, aliases: [] },
+  { value: "reading", label: "Lectura", icon: BookOpen, aliases: [] },
+  { value: "travel", label: "Viajes", icon: Plane, aliases: [] },
+  { value: "music", label: "Música", icon: Music2, aliases: [] },
+  { value: "photo", label: "Fotografía", icon: Camera, aliases: [] },
+  { value: "shopping", label: "Compras", icon: ShoppingBag, aliases: [] },
+  { value: "family", label: "Familia", icon: UsersRound, aliases: [] },
+  { value: "goals", label: "Metas", icon: Rocket, aliases: [] },
+  { value: "projects", label: "Proyectos", icon: Factory, aliases: [] },
+  { value: "gaming", label: "Juegos", icon: Gamepad2, aliases: [] },
+  { value: "food", label: "Comida", icon: Utensils, aliases: [] },
+  { value: "nature", label: "Naturaleza", icon: Leaf, aliases: [] },
+  { value: "media", label: "Películas", icon: Film, aliases: [] },
+  { value: "voice", label: "Podcast", icon: Mic2, aliases: [] },
+  { value: "maps", label: "Lugares", icon: Map, aliases: [] },
+  { value: "gifts", label: "Regalos", icon: Gift, aliases: [] },
+  { value: "savings", label: "Ahorro", icon: WalletCards, aliases: [] },
+  { value: "institution", label: "Instituciones", icon: Landmark, aliases: [] },
 ] as const;
 
 type FocusState =
@@ -147,8 +192,21 @@ function getSpace(spaces: Space[], id: string | null) {
   return spaces.find((space) => space.id === id) ?? null;
 }
 
+function countSpaceItems(data: NexoData, spaceId: string) {
+  return (
+    data.notes.filter((item) => item.spaceId === spaceId && !item.isTrashed).length +
+    data.tasks.filter((item) => item.spaceId === spaceId).length +
+    data.events.filter((item) => item.spaceId === spaceId).length +
+    data.savedItems.filter((item) => item.spaceId === spaceId).length +
+    data.lists.filter((item) => item.spaceId === spaceId).length +
+    data.driveFiles.filter((item) => item.spaceId === spaceId && !item.isTrashed).length
+  );
+}
+
 function countActiveModules(data: NexoData) {
-  return data.settings.enabledModules.filter((module) => module !== "dashboard" && module !== "settings").length;
+  return data.settings.enabledModules.filter(
+    (module) => module !== "dashboard" && module !== "profile" && module !== "settings",
+  ).length;
 }
 
 function SpaceIcon({ value, className = "h-5 w-5" }: { value: string; className?: string }) {
@@ -170,8 +228,11 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
     deleteDriveFile,
   } = useNexoData();
   const [activeModule, setActiveModule] = useState<ModuleKey>("dashboard");
+  const [activeSpaceId, setActiveSpaceId] = useState<string | null>(null);
+  const [profileUser, setProfileUser] = useState(user);
   const [query, setQuery] = useState("");
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [dialog, setDialog] = useState<FeedbackDialogState | null>(null);
   const [online, setOnline] = useState(true);
   const [nowTick, setNowTick] = useState(Date.now());
@@ -195,6 +256,46 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
       confirmLabel: "Eliminar",
       onConfirm,
     });
+  };
+
+  const selectSpace = (spaceId: string) => {
+    setActiveSpaceId(spaceId);
+    setActiveModule("dashboard");
+    setQuery("");
+  };
+
+  const markNotificationRead = (notificationId: string) => {
+    setData((current) => ({
+      ...current,
+      settings: {
+        ...current.settings,
+        readNotificationIds: current.settings.readNotificationIds.includes(notificationId)
+          ? current.settings.readNotificationIds
+          : [...current.settings.readNotificationIds, notificationId],
+      },
+    }));
+  };
+
+  const markAllNotificationsRead = () => {
+    setData((current) => ({
+      ...current,
+      settings: {
+        ...current.settings,
+        readNotificationIds: Array.from(
+          new Set([...current.settings.readNotificationIds, ...notifications.map((notification) => notification.id)]),
+        ),
+      },
+    }));
+  };
+
+  const openNotification = (notification: WorkspaceNotification) => {
+    setActiveSpaceId(
+      notification.spaceId && data.spaces.some((space) => space.id === notification.spaceId)
+        ? notification.spaceId
+        : null,
+    );
+    setActiveModule(notification.module);
+    setNotificationsOpen(false);
   };
 
   useEffect(() => {
@@ -261,14 +362,32 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
   }, [focus, remainingSeconds, setData]);
 
   const visibleModules = modules.filter(
-    (module) => module.key === "dashboard" || module.key === "settings" || data.settings.enabledModules.includes(module.key),
+    (module) =>
+      module.key === "dashboard" ||
+      module.key === "profile" ||
+      module.key === "settings" ||
+      data.settings.enabledModules.includes(module.key),
   );
-  const upcomingEvents = [...data.events].sort(
+  const activeSpace = getSpace(data.spaces, activeSpaceId);
+  const scopedNotes = data.notes.filter((note) => !note.isTrashed && (!activeSpaceId || note.spaceId === activeSpaceId));
+  const scopedTasks = data.tasks.filter((task) => !activeSpaceId || task.spaceId === activeSpaceId);
+  const scopedEvents = data.events.filter((event) => !activeSpaceId || event.spaceId === activeSpaceId);
+  const scopedSavedItems = data.savedItems.filter((item) => !activeSpaceId || item.spaceId === activeSpaceId);
+  const scopedLists = data.lists.filter((list) => !activeSpaceId || list.spaceId === activeSpaceId);
+  const scopedDriveFiles = data.driveFiles.filter(
+    (file) => !file.isTrashed && (!activeSpaceId || file.spaceId === activeSpaceId),
+  );
+  const scopedFocusSessions = data.focusSessions.filter(
+    (session) => !activeSpaceId || session.spaceId === activeSpaceId,
+  );
+  const upcomingEvents = [...scopedEvents].sort(
     (first, second) => new Date(first.startsAt).getTime() - new Date(second.startsAt).getTime(),
   );
-  const activeTasks = data.tasks.filter((task) => task.status !== "completed");
-  const notes = data.notes.filter((note) => !note.isTrashed);
-  const driveFiles = data.driveFiles.filter((file) => !file.isTrashed);
+  const activeTasks = scopedTasks.filter((task) => task.status !== "completed");
+  const notifications = buildWorkspaceNotifications(data);
+  const unreadNotificationCount = notifications.filter(
+    (notification) => !data.settings.readNotificationIds.includes(notification.id),
+  ).length;
 
   const searchResults = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -278,23 +397,23 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
     }
 
     return [
-      ...notes
+      ...scopedNotes
         .filter((note) => `${note.title} ${note.content}`.toLowerCase().includes(normalized))
         .map((note) => ({ id: note.id, type: "Nota", title: note.title, module: "notes" as ModuleKey })),
-      ...data.tasks
+      ...scopedTasks
         .filter((task) => `${task.title} ${task.description}`.toLowerCase().includes(normalized))
         .map((task) => ({ id: task.id, type: "Tarea", title: task.title, module: "tasks" as ModuleKey })),
-      ...driveFiles
+      ...scopedDriveFiles
         .filter((file) => file.name.toLowerCase().includes(normalized))
         .map((file) => ({ id: file.id, type: "Archivo", title: file.name, module: "drive" as ModuleKey })),
       ...data.spaces
         .filter((space) => `${space.name} ${space.description}`.toLowerCase().includes(normalized))
         .map((space) => ({ id: space.id, type: "Espacio", title: space.name, module: "spaces" as ModuleKey })),
-      ...data.savedItems
+      ...scopedSavedItems
         .filter((item) => `${item.title} ${item.description} ${item.url}`.toLowerCase().includes(normalized))
         .map((item) => ({ id: item.id, type: "Guardado", title: item.title, module: "saved" as ModuleKey })),
     ].slice(0, 8);
-  }, [data.savedItems, data.spaces, data.tasks, driveFiles, notes, query]);
+  }, [data.spaces, query, scopedDriveFiles, scopedNotes, scopedSavedItems, scopedTasks]);
 
   const addNote = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -443,6 +562,7 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
 
   const deleteSpace = (space: Space) => {
     requestRemoval(`el espacio “${space.name}”`, () => {
+      if (activeSpaceId === space.id) setActiveSpaceId(null);
       setData((current) => ({
         ...current,
         spaces: current.spaces.filter((item) => item.id !== space.id),
@@ -584,7 +704,13 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
 
     const nextFiles = await uploadDriveFiles(files);
 
-    setData((current) => ({ ...current, driveFiles: [...nextFiles, ...current.driveFiles] }));
+    setData((current) => ({
+      ...current,
+      driveFiles: [
+        ...nextFiles.map((file) => ({ ...file, spaceId: activeSpaceId || file.spaceId })),
+        ...current.driveFiles,
+      ],
+    }));
   };
 
   const removeDriveFile = async (file: DriveFile) => {
@@ -592,7 +718,7 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
   };
 
   const toggleModule = (moduleKey: ModuleKey) => {
-    if (moduleKey === "dashboard" || moduleKey === "settings") {
+    if (moduleKey === "dashboard" || moduleKey === "profile" || moduleKey === "settings") {
       return;
     }
 
@@ -623,7 +749,7 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
       remainingSeconds: minutes * 60,
       startedAt: Date.now(),
       taskId: null,
-      spaceId: null,
+      spaceId: activeSpaceId,
     });
   };
 
@@ -671,7 +797,7 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col justify-between bg-[var(--surface)] p-4 shadow-[6px_0_16px_var(--shadow-dark-soft)] lg:flex">
-        <div className="space-y-6">
+        <div className="space-y-6 overflow-y-auto pr-1">
           <button
             className="flex items-center gap-3 px-2 pt-2 text-left"
             onClick={() => setActiveModule("dashboard")}
@@ -722,9 +848,13 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
             </div>
             {data.spaces.slice(0, 5).map((space) => (
               <button
-                className="flex w-full items-center justify-between rounded-2xl px-3 py-2 text-sm text-[var(--muted)] transition hover:bg-[var(--surface-container-low)] hover:text-[var(--foreground)]"
+                className={
+                  activeSpaceId === space.id
+                    ? "flex w-full items-center justify-between rounded-2xl bg-[var(--primary-soft)] px-3 py-2 text-sm font-bold text-[var(--primary-strong)]"
+                    : "flex w-full items-center justify-between rounded-2xl px-3 py-2 text-sm text-[var(--muted)] transition hover:bg-[var(--surface-container-low)] hover:text-[var(--foreground)]"
+                }
                 key={space.id}
-                onClick={() => setActiveModule("spaces")}
+                onClick={() => selectSpace(space.id)}
                 type="button"
               >
                 <span className="flex items-center gap-2.5">
@@ -737,14 +867,20 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
                   {space.name}
                 </span>
                 <span className="nexo-inset rounded-lg px-2 py-0.5 text-[0.68rem] font-bold text-[var(--primary)]">
-                  {data.notes.filter((note) => note.spaceId === space.id).length + data.tasks.filter((task) => task.spaceId === space.id).length}
+                  {countSpaceItems(data, space.id)}
                 </span>
               </button>
             ))}
           </section>
         </div>
 
-        <ProfileFooter online={online} syncMessage={syncMessage} syncStatus={syncStatus} user={user} />
+        <ProfileFooter
+          onOpenProfile={() => setActiveModule("profile")}
+          online={online}
+          syncMessage={syncMessage}
+          syncStatus={syncStatus}
+          user={profileUser}
+        />
       </aside>
 
       <header className="safe-top sticky top-0 z-30 bg-[color-mix(in_srgb,var(--surface)_90%,transparent)] px-4 py-3 shadow-[0_4px_12px_var(--shadow-dark-soft)] backdrop-blur-md lg:ml-64 lg:px-8">
@@ -778,6 +914,32 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
             >
               <Search aria-hidden className="h-5 w-5" />
             </Button>
+            <div className="relative">
+              <Button
+                aria-expanded={notificationsOpen}
+                aria-label={`Notificaciones${unreadNotificationCount ? `, ${unreadNotificationCount} sin leer` : ""}`}
+                onClick={() => setNotificationsOpen((current) => !current)}
+                size="icon"
+                variant="secondary"
+              >
+                <Bell aria-hidden className="h-5 w-5" />
+                {unreadNotificationCount ? (
+                  <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-[var(--danger)] px-1 text-[0.62rem] font-bold text-white">
+                    {Math.min(unreadNotificationCount, 9)}
+                    {unreadNotificationCount > 9 ? "+" : ""}
+                  </span>
+                ) : null}
+              </Button>
+              {notificationsOpen ? (
+                <NotificationsPanel
+                  notifications={notifications}
+                  onOpen={openNotification}
+                  onRead={markNotificationRead}
+                  onReadAll={markAllNotificationsRead}
+                  readIds={data.settings.readNotificationIds}
+                />
+              ) : null}
+            </div>
             <Button onClick={() => setActiveModule("notes")} variant="primary">
               <Plus aria-hidden className="h-4 w-4" />
               <span className="hidden sm:inline">Crear</span>
@@ -825,21 +987,32 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
             />
           ) : null}
 
+          {activeSpace ? (
+            <ActiveSpaceBar
+              data={data}
+              onClear={() => setActiveSpaceId(null)}
+              onManage={() => setActiveModule("spaces")}
+              space={activeSpace}
+            />
+          ) : null}
+
           {activeModule === "dashboard" ? (
             <DashboardView
               activeTasks={activeTasks}
-              driveFiles={driveFiles}
+              driveFiles={scopedDriveFiles}
               events={upcomingEvents}
-              focusSessions={data.focusSessions}
-              notes={notes}
+              focusSessions={scopedFocusSessions}
+              notes={scopedNotes}
               onNavigate={setActiveModule}
+              onSelectSpace={selectSpace}
               spaces={data.spaces}
             />
           ) : null}
           {activeModule === "notes" ? (
             <NotesView
+              activeSpaceId={activeSpaceId}
               addNote={addNote}
-              notes={notes}
+              notes={scopedNotes}
               onDeleteNote={(note) => {
                 requestRemoval(`la nota “${note.title}”`, () => {
                   setData((current) => ({
@@ -865,23 +1038,31 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
               addTask={addTask}
               onDelete={deleteTask}
               onUpdateStatus={updateTaskStatus}
+              activeSpaceId={activeSpaceId}
               spaces={data.spaces}
-              tasks={data.tasks}
+              tasks={scopedTasks}
             />
           ) : null}
           {activeModule === "drive" ? (
-            <DriveView driveFiles={driveFiles} onDelete={removeDriveFile} onOpen={openDriveFile} onUpload={addDriveFiles} />
+            <DriveView driveFiles={scopedDriveFiles} onDelete={removeDriveFile} onOpen={openDriveFile} onUpload={addDriveFiles} />
           ) : null}
           {activeModule === "calendar" ? (
-            <CalendarView addEvent={addEvent} events={data.events} onDelete={deleteEvent} spaces={data.spaces} />
+            <CalendarView
+              activeSpaceId={activeSpaceId}
+              addEvent={addEvent}
+              events={scopedEvents}
+              onDelete={deleteEvent}
+              spaces={data.spaces}
+            />
           ) : null}
           {activeModule === "spaces" ? (
-            <SpacesView addSpace={addSpace} notes={notes} onDelete={deleteSpace} spaces={data.spaces} tasks={data.tasks} />
+            <SpacesView addSpace={addSpace} data={data} onDelete={deleteSpace} onOpen={selectSpace} spaces={data.spaces} />
           ) : null}
           {activeModule === "saved" ? (
             <SavedView
+              activeSpaceId={activeSpaceId}
               addSavedItem={addSavedItem}
-              items={data.savedItems}
+              items={scopedSavedItems}
               onDelete={deleteSavedItem}
               onToggleFavorite={toggleSavedFavorite}
               spaces={data.spaces}
@@ -889,10 +1070,11 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
           ) : null}
           {activeModule === "lists" ? (
             <ListsView
+              activeSpaceId={activeSpaceId}
               addList={addList}
               addListItem={addListItem}
               items={data.listItems}
-              lists={data.lists}
+              lists={scopedLists}
               onDeleteList={deleteList}
               setData={setData}
               spaces={data.spaces}
@@ -904,11 +1086,12 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
               remainingSeconds={remainingSeconds}
               resetFocus={resetFocus}
               resumeFocus={resumeFocus}
-              sessions={data.focusSessions}
+              sessions={scopedFocusSessions}
               startFocus={startFocus}
               pauseFocus={pauseFocus}
             />
           ) : null}
+          {activeModule === "profile" ? <ProfileView onUserUpdate={setProfileUser} user={profileUser} /> : null}
           {activeModule === "settings" ? (
             <SettingsView
               accent={accent}
@@ -970,11 +1153,13 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
 }
 
 function ProfileFooter({
+  onOpenProfile,
   online,
   syncMessage,
   syncStatus,
   user,
 }: {
+  onOpenProfile: () => void;
   online: boolean;
   syncMessage: string;
   syncStatus: NexoSyncStatus;
@@ -992,16 +1177,22 @@ function ProfileFooter({
   return (
     <div className="space-y-3 border-t border-[var(--surface-container)] pt-4">
       <div className="nexo-surface flex items-center justify-between rounded-3xl p-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--primary-soft)] text-sm font-bold text-[var(--primary-strong)]">
-            {getInitials(user.name)}
-          </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-bold">{user.name}</p>
-            <p className="truncate text-xs text-[var(--muted-soft)]">{user.email}</p>
-            <p className="text-xs text-[var(--muted-soft)]">{online ? statusLabel : "Sin conexión"}</p>
-          </div>
-        </div>
+        <button className="flex min-w-0 items-center gap-3 text-left" onClick={onOpenProfile} type="button">
+          <span
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--primary-soft)] bg-cover bg-center text-sm font-bold text-[var(--primary-strong)]"
+            style={user.avatarUrl ? { backgroundImage: `url(${user.avatarUrl})` } : undefined}
+          >
+            {user.avatarUrl ? <span className="sr-only">Foto de {user.name}</span> : null}
+            {!user.avatarUrl ? getInitials(user.name) : null}
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-bold">{user.name}</span>
+            <span className="block truncate text-xs text-[var(--muted-soft)]">
+              {user.username ? `@${user.username}` : user.email}
+            </span>
+            <span className="block text-xs text-[var(--muted-soft)]">{online ? statusLabel : "Sin conexión"}</span>
+          </span>
+        </button>
         <form action={signOut}>
           <Button aria-label="Cerrar sesión" size="icon" title="Cerrar sesión" variant="ghost">
             <LogOut aria-hidden className="h-4 w-4" />
@@ -1012,6 +1203,46 @@ function ProfileFooter({
         {online ? syncMessage : "Cambios guardados offline"}
       </div>
     </div>
+  );
+}
+
+function ActiveSpaceBar({
+  data,
+  space,
+  onClear,
+  onManage,
+}: {
+  data: NexoData;
+  space: Space;
+  onClear: () => void;
+  onManage: () => void;
+}) {
+  return (
+    <section className="flex flex-col gap-4 border-b border-[var(--border)] pb-5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 items-center gap-3">
+        <span
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
+          style={{ backgroundColor: `${space.color}20`, color: space.color }}
+        >
+          <SpaceIcon value={space.icon} />
+        </span>
+        <div className="min-w-0">
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--primary)]">Filtro activo</p>
+          <h2 className="truncate font-display text-lg font-bold">{space.name}</h2>
+          <p className="truncate text-sm text-[var(--muted)]">
+            {countSpaceItems(data, space.id)} elementos · {space.description || "Sin descripción"}
+          </p>
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <Button onClick={onManage} size="sm">
+          Gestionar
+        </Button>
+        <Button onClick={onClear} size="sm" variant="ghost">
+          Ver todo
+        </Button>
+      </div>
+    </section>
   );
 }
 
@@ -1078,6 +1309,7 @@ function DashboardView({
   spaces,
   focusSessions,
   onNavigate,
+  onSelectSpace,
 }: {
   activeTasks: Task[];
   notes: Note[];
@@ -1086,6 +1318,7 @@ function DashboardView({
   spaces: Space[];
   focusSessions: NexoData["focusSessions"];
   onNavigate: (module: ModuleKey) => void;
+  onSelectSpace: (spaceId: string) => void;
 }) {
   const completedFocusMinutes = focusSessions.reduce((total, session) => total + session.durationMinutes, 0);
 
@@ -1147,10 +1380,20 @@ function DashboardView({
           </CardHeader>
           <div className="mt-4 space-y-3">
             {spaces.slice(0, 4).map((space) => (
-              <div className="flex items-center gap-3" key={space.id}>
-                <span className="h-3 w-3 rounded-full" style={{ backgroundColor: space.color }} />
+              <button
+                className="flex w-full items-center gap-3 rounded-xl p-1.5 text-left transition hover:bg-[var(--surface-container-low)]"
+                key={space.id}
+                onClick={() => onSelectSpace(space.id)}
+                type="button"
+              >
+                <span
+                  className="flex h-8 w-8 items-center justify-center rounded-lg"
+                  style={{ backgroundColor: `${space.color}20`, color: space.color }}
+                >
+                  <SpaceIcon className="h-4 w-4" value={space.icon} />
+                </span>
                 <span className="text-sm font-semibold">{space.name}</span>
-              </div>
+              </button>
             ))}
           </div>
         </Card>
@@ -1215,9 +1458,17 @@ function MetricCard({ icon: Icon, label, value }: { icon: typeof Home; label: st
   );
 }
 
-function SpaceSelect({ spaces, name = "spaceId" }: { spaces: Space[]; name?: string }) {
+function SpaceSelect({
+  spaces,
+  name = "spaceId",
+  defaultValue = "",
+}: {
+  spaces: Space[];
+  name?: string;
+  defaultValue?: string | null;
+}) {
   return (
-    <select className="nexo-inset h-11 rounded-2xl px-3 text-sm outline-none" defaultValue="" name={name}>
+    <select className="nexo-inset h-11 rounded-2xl px-3 text-sm outline-none" defaultValue={defaultValue ?? ""} name={name}>
       <option value="">Sin espacio</option>
       {spaces.map((space) => (
         <option key={space.id} value={space.id}>
@@ -1229,6 +1480,7 @@ function SpaceSelect({ spaces, name = "spaceId" }: { spaces: Space[]; name?: str
 }
 
 function NotesView({
+  activeSpaceId,
   notes,
   spaces,
   addNote,
@@ -1236,6 +1488,7 @@ function NotesView({
   onToggleFavorite,
   onDeleteNote,
 }: {
+  activeSpaceId: string | null;
   notes: Note[];
   spaces: Space[];
   addNote: (event: React.FormEvent<HTMLFormElement>) => void;
@@ -1249,7 +1502,7 @@ function NotesView({
         <CardTitle>Nueva nota</CardTitle>
         <form className="mt-4 space-y-3" onSubmit={addNote}>
           <Input name="title" placeholder="Título" required />
-          <SpaceSelect spaces={spaces} />
+          <SpaceSelect defaultValue={activeSpaceId} spaces={spaces} />
           <textarea
             className="nexo-inset min-h-40 w-full rounded-2xl p-4 text-sm outline-none"
             name="content"
@@ -1296,12 +1549,14 @@ function NotesView({
 }
 
 function TasksView({
+  activeSpaceId,
   tasks,
   spaces,
   addTask,
   onDelete,
   onUpdateStatus,
 }: {
+  activeSpaceId: string | null;
   tasks: Task[];
   spaces: Space[];
   addTask: (event: React.FormEvent<HTMLFormElement>) => void;
@@ -1323,7 +1578,7 @@ function TasksView({
             ))}
           </select>
           <Input name="dueDate" type="date" defaultValue={todayInputValue()} />
-          <SpaceSelect spaces={spaces} />
+          <SpaceSelect defaultValue={activeSpaceId} spaces={spaces} />
           <Button type="submit" variant="primary">
             Crear
           </Button>
@@ -1480,11 +1735,13 @@ function DriveView({
 }
 
 function CalendarView({
+  activeSpaceId,
   events,
   spaces,
   addEvent,
   onDelete,
 }: {
+  activeSpaceId: string | null;
   events: CalendarEvent[];
   spaces: Space[];
   addEvent: (event: React.FormEvent<HTMLFormElement>) => void;
@@ -1504,7 +1761,7 @@ function CalendarView({
             defaultValue={dateTimeInputValue(new Date(Date.now() + 60 * 60 * 1000))}
             required
           />
-          <SpaceSelect spaces={spaces} />
+          <SpaceSelect defaultValue={activeSpaceId} spaces={spaces} />
           <Button className="w-full" type="submit" variant="primary">
             Guardar evento
           </Button>
@@ -1552,16 +1809,16 @@ function CalendarView({
 
 function SpacesView({
   spaces,
-  notes,
-  tasks,
+  data,
   addSpace,
   onDelete,
+  onOpen,
 }: {
   spaces: Space[];
-  notes: Note[];
-  tasks: Task[];
+  data: NexoData;
   addSpace: (event: React.FormEvent<HTMLFormElement>) => void;
   onDelete: (space: Space) => void;
+  onOpen: (spaceId: string) => void;
 }) {
   return (
     <div className="grid gap-6 xl:grid-cols-[360px_1fr]">
@@ -1572,7 +1829,7 @@ function SpacesView({
           <Input name="description" placeholder="Descripción" />
           <fieldset>
             <legend className="mb-2 text-sm font-bold">Icono</legend>
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid max-h-48 grid-cols-6 gap-2 overflow-y-auto p-1">
               {spaceIconOptions.map((option, index) => {
                 const Icon = option.icon;
                 return (
@@ -1626,16 +1883,24 @@ function SpacesView({
                 </Button>
               </div>
             </div>
-            <div className="mt-5 grid grid-cols-2 gap-3">
+            <div className="mt-5 grid grid-cols-3 gap-3">
               <div className="nexo-inset rounded-2xl p-3">
                 <p className="text-xs text-[var(--muted)]">Notas</p>
-                <p className="font-display text-2xl font-bold">{notes.filter((note) => note.spaceId === space.id).length}</p>
+                <p className="font-display text-2xl font-bold">{data.notes.filter((note) => note.spaceId === space.id && !note.isTrashed).length}</p>
               </div>
               <div className="nexo-inset rounded-2xl p-3">
                 <p className="text-xs text-[var(--muted)]">Tareas</p>
-                <p className="font-display text-2xl font-bold">{tasks.filter((task) => task.spaceId === space.id).length}</p>
+                <p className="font-display text-2xl font-bold">{data.tasks.filter((task) => task.spaceId === space.id).length}</p>
+              </div>
+              <div className="nexo-inset rounded-2xl p-3">
+                <p className="text-xs text-[var(--muted)]">Total</p>
+                <p className="font-display text-2xl font-bold">{countSpaceItems(data, space.id)}</p>
               </div>
             </div>
+            <Button className="mt-4 w-full" onClick={() => onOpen(space.id)} variant="primary">
+              Abrir espacio
+              <ExternalLink aria-hidden className="h-4 w-4" />
+            </Button>
           </Card>
         ))}
         {!spaces.length ? <EmptyState icon={Sparkles} message="No hay espacios. Crea uno para agrupar tu trabajo." /> : null}
@@ -1645,12 +1910,14 @@ function SpacesView({
 }
 
 function SavedView({
+  activeSpaceId,
   items,
   spaces,
   addSavedItem,
   onDelete,
   onToggleFavorite,
 }: {
+  activeSpaceId: string | null;
   items: SavedItem[];
   spaces: Space[];
   addSavedItem: (event: React.FormEvent<HTMLFormElement>) => void;
@@ -1672,7 +1939,7 @@ function SavedView({
               </option>
             ))}
           </select>
-          <SpaceSelect spaces={spaces} />
+          <SpaceSelect defaultValue={activeSpaceId} spaces={spaces} />
           <Button className="w-full" type="submit" variant="primary">
             Guardar
           </Button>
@@ -1725,6 +1992,7 @@ function SavedView({
 }
 
 function ListsView({
+  activeSpaceId,
   lists,
   items,
   spaces,
@@ -1733,6 +2001,7 @@ function ListsView({
   addListItem,
   onDeleteList,
 }: {
+  activeSpaceId: string | null;
   lists: NexoData["lists"];
   items: NexoData["listItems"];
   spaces: Space[];
@@ -1747,7 +2016,7 @@ function ListsView({
         <CardTitle>Nueva lista</CardTitle>
         <form className="mt-4 grid gap-3 md:grid-cols-[1fr_220px_auto]" onSubmit={addList}>
           <Input name="name" placeholder="Nombre de la lista" required />
-          <SpaceSelect spaces={spaces} />
+          <SpaceSelect defaultValue={activeSpaceId} spaces={spaces} />
           <Button type="submit" variant="primary">
             Crear
           </Button>
@@ -1986,7 +2255,7 @@ function SettingsView({
           </CardHeader>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             {availableModules
-              .filter((module) => module.key !== "dashboard" && module.key !== "settings")
+              .filter((module) => module.key !== "dashboard" && module.key !== "profile" && module.key !== "settings")
               .map((module) => {
                 const Icon = module.icon;
                 const enabled = settings.enabledModules.includes(module.key);

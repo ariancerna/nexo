@@ -162,6 +162,7 @@ export const defaultNexoData: NexoData = {
       "focus",
       "settings",
     ],
+    readNotificationIds: [],
   },
 };
 

@@ -40,9 +40,9 @@ export function AuthCard({
             </span>
           </span>
         </Link>
-        <Link className="auth-back" href="/">
+        <Link aria-label="Volver al inicio" className="auth-back" href="/">
           <ArrowLeft aria-hidden className="h-4 w-4" />
-          <span className="hidden sm:inline">Volver a Nexo</span>
+          <span>Volver al inicio</span>
         </Link>
       </header>
 

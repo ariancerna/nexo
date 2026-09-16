@@ -106,6 +106,7 @@ function normalizeSettings(value: Json | UserSettings | null | undefined): UserS
     enabled_modules?: ModuleKey[];
     interface_density?: UserSettings["interfaceDensity"];
     shadow_intensity?: UserSettings["shadowIntensity"];
+    read_notification_ids?: string[];
   };
 
   return {
@@ -116,6 +117,11 @@ function normalizeSettings(value: Json | UserSettings | null | undefined): UserS
     interfaceDensity:
       candidate.interfaceDensity ?? candidate.interface_density ?? defaultNexoData.settings.interfaceDensity,
     shadowIntensity: candidate.shadowIntensity ?? candidate.shadow_intensity ?? defaultNexoData.settings.shadowIntensity,
+    readNotificationIds: Array.isArray(candidate.readNotificationIds ?? candidate.read_notification_ids)
+      ? (candidate.readNotificationIds ?? candidate.read_notification_ids ?? []).filter(
+          (item): item is string => typeof item === "string",
+        )
+      : [],
   };
 }
 
@@ -127,6 +133,7 @@ function settingsToPreferences(settings: UserSettings): Json {
     animations: settings.animations,
     shadow_intensity: settings.shadowIntensity,
     enabled_modules: settings.enabledModules,
+    read_notification_ids: settings.readNotificationIds.slice(-200),
   };
 }
 

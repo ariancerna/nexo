@@ -8,6 +8,7 @@ export type ModuleKey =
   | "saved"
   | "lists"
   | "focus"
+  | "profile"
   | "settings";
 
 export type TaskStatus = "todo" | "in_progress" | "completed";
@@ -113,6 +114,7 @@ export type UserSettings = {
   animations: boolean;
   shadowIntensity: "soft" | "medium" | "deep";
   enabledModules: ModuleKey[];
+  readNotificationIds: string[];
 };
 
 export type NexoData = {

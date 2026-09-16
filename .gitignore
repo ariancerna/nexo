@@ -6,6 +6,7 @@ build/
 .vercel/
 test-results/
 playwright-report/
+.codex-*.png
 
 .env
 .env*.local

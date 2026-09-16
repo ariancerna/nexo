@@ -190,6 +190,152 @@ export async function signOut() {
   redirect(authRoutes.login);
 }
 
+export type ProfileUpdateResult =
+  | {
+      ok: true;
+      message: string;
+      profile: {
+        name: string;
+        username: string | null;
+        timezone: string;
+        avatarPath: string | null;
+        avatarUrl: string | null;
+        usernameChangedAt: string | null;
+      };
+    }
+  | { ok: false; message: string };
+
+function isValidTimezone(timezone: string) {
+  try {
+    new Intl.DateTimeFormat("es", { timeZone: timezone }).format();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function saveProfile(formData: FormData): Promise<ProfileUpdateResult> {
+  if (!getOptionalSupabasePublicEnv()) {
+    return { ok: false, message: "El servicio de cuenta no está disponible." };
+  }
+
+  const fullName = String(formData.get("fullName") ?? "").trim();
+  const usernameValue = String(formData.get("username") ?? "").trim().toLowerCase();
+  const timezone = String(formData.get("timezone") ?? "").trim();
+  const avatar = formData.get("avatar");
+
+  if (fullName.length < 2 || fullName.length > 80) {
+    return { ok: false, message: "El nombre debe tener entre 2 y 80 caracteres." };
+  }
+
+  if (usernameValue && !/^[a-z0-9][a-z0-9-]{2,19}$/.test(usernameValue)) {
+    return { ok: false, message: "El usuario debe tener entre 3 y 20 caracteres y usar letras, números o guiones." };
+  }
+
+  if (!isValidTimezone(timezone)) {
+    return { ok: false, message: "Selecciona una zona horaria válida." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+
+  if (userError || !userData.user) {
+    return { ok: false, message: "Tu sesión venció. Inicia sesión nuevamente." };
+  }
+
+  const { data: currentProfile, error: currentProfileError } = await supabase
+    .from("profiles")
+    .select("avatar_url")
+    .eq("id", userData.user.id)
+    .single();
+
+  if (currentProfileError) {
+    return { ok: false, message: "No pudimos cargar tu perfil." };
+  }
+
+  let avatarPath = currentProfile.avatar_url;
+  let uploadedAvatarPath: string | null = null;
+
+  if (avatar instanceof File && avatar.size > 0) {
+    const allowedTypes = new Map([
+      ["image/jpeg", "jpg"],
+      ["image/png", "png"],
+      ["image/webp", "webp"],
+    ]);
+    const extension = allowedTypes.get(avatar.type);
+
+    if (!extension) {
+      return { ok: false, message: "La foto debe ser JPG, PNG o WebP." };
+    }
+
+    if (avatar.size > 3 * 1024 * 1024) {
+      return { ok: false, message: "La foto no puede superar los 3 MB." };
+    }
+
+    uploadedAvatarPath = `${userData.user.id}/avatar-${Date.now()}.${extension}`;
+    const { error: uploadError } = await supabase.storage.from("nexo-avatars").upload(uploadedAvatarPath, avatar, {
+      cacheControl: "3600",
+      contentType: avatar.type,
+      upsert: false,
+    });
+
+    if (uploadError) {
+      return { ok: false, message: "No pudimos subir la foto. Inténtalo nuevamente." };
+    }
+
+    avatarPath = uploadedAvatarPath;
+  }
+
+  const { data: profile, error } = await supabase
+    .from("profiles")
+    .update({
+      avatar_url: avatarPath,
+      full_name: fullName,
+      timezone,
+      username: usernameValue || null,
+    })
+    .eq("id", userData.user.id)
+    .select("full_name, username, timezone, avatar_url, username_changed_at")
+    .single();
+
+  if (error) {
+    if (uploadedAvatarPath) {
+      await supabase.storage.from("nexo-avatars").remove([uploadedAvatarPath]);
+    }
+
+    if (error.message.includes("username_change_cooldown")) {
+      return { ok: false, message: "El nombre de usuario sólo puede cambiarse una vez cada 30 días." };
+    }
+
+    if (error.code === "23505") {
+      return { ok: false, message: "Ese nombre de usuario ya está en uso." };
+    }
+
+    return { ok: false, message: "No pudimos guardar el perfil. Revisa los datos e inténtalo otra vez." };
+  }
+
+  if (uploadedAvatarPath && currentProfile.avatar_url && currentProfile.avatar_url !== uploadedAvatarPath) {
+    await supabase.storage.from("nexo-avatars").remove([currentProfile.avatar_url]);
+  }
+
+  const signedAvatar = profile.avatar_url
+    ? await supabase.storage.from("nexo-avatars").createSignedUrl(profile.avatar_url, 60 * 60 * 24)
+    : null;
+
+  return {
+    ok: true,
+    message: "Perfil actualizado.",
+    profile: {
+      name: profile.full_name || fullName,
+      username: profile.username,
+      timezone: profile.timezone || timezone,
+      avatarPath: profile.avatar_url,
+      avatarUrl: signedAvatar?.data?.signedUrl ?? null,
+      usernameChangedAt: profile.username_changed_at,
+    },
+  };
+}
+
 export async function completeOnboarding(formData: FormData) {
   requireBackend();
 

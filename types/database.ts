@@ -29,6 +29,7 @@ export type Database = {
           avatar_url: string | null;
           bio: string | null;
           timezone: string | null;
+          username_changed_at: string | null;
           onboarding_completed: boolean;
         } & TimestampColumns;
         Insert: {
@@ -38,6 +39,7 @@ export type Database = {
           avatar_url?: string | null;
           bio?: string | null;
           timezone?: string | null;
+          username_changed_at?: string | null;
           onboarding_completed?: boolean;
         } & TimestampInsert;
         Update: {
@@ -46,6 +48,7 @@ export type Database = {
           avatar_url?: string | null;
           bio?: string | null;
           timezone?: string | null;
+          username_changed_at?: string | null;
           onboarding_completed?: boolean;
         } & TimestampUpdate;
         Relationships: [];
