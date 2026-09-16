@@ -109,7 +109,7 @@ const taskStatuses: TaskStatus[] = ["todo", "in_progress", "completed"];
 const priorities: Priority[] = ["low", "medium", "high"];
 const savedTypes: SavedItemType[] = ["article", "video", "repository", "document", "link", "other"];
 const spaceIconOptions = [
-  { value: "sparkles", label: "General", icon: Sparkles, aliases: [] },
+  { value: "general", label: "General", icon: LayoutGrid, aliases: ["sparkles"] },
   { value: "study", label: "Estudio", icon: GraduationCap, aliases: ["🎓"] },
   { value: "code", label: "Programación", icon: Code2, aliases: ["💻"] },
   { value: "home", label: "Hogar", icon: Home, aliases: ["🏠"] },
@@ -213,8 +213,14 @@ function countActiveModules(data: NexoData) {
 
 function SpaceIcon({ value, className = "h-5 w-5" }: { value: string; className?: string }) {
   const option = spaceIconOptions.find((item) => item.value === value || item.aliases.some((alias) => alias === value));
-  const Icon = option?.icon ?? Sparkles;
+  const Icon = option?.icon ?? LayoutGrid;
   return <Icon aria-hidden className={className} />;
+}
+
+function applyDocumentTheme(theme: NexoData["settings"]["theme"]) {
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const resolvedTheme = theme === "system" ? (prefersDark ? "dark" : "light") : theme;
+  document.documentElement.classList.toggle("dark", resolvedTheme === "dark");
 }
 
 export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
@@ -250,6 +256,13 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
   const { setTheme } = useTheme();
   const { accent, setAccent } = useAccent();
   const closeDialog = useCallback(() => setDialog(null), []);
+  const applyTheme = useCallback(
+    (theme: NexoData["settings"]["theme"]) => {
+      applyDocumentTheme(theme);
+      setTheme(theme);
+    },
+    [setTheme],
+  );
 
   const requestRemoval = (label: string, onConfirm: () => void | Promise<void>) => {
     setDialog({
@@ -303,9 +316,9 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
 
   useEffect(() => {
     if (!ready) return;
-    setTheme(data.settings.theme);
+    applyTheme(data.settings.theme);
     setAccent(data.settings.accentColor);
-  }, [data.settings.accentColor, data.settings.theme, ready, setAccent, setTheme]);
+  }, [applyTheme, data.settings.accentColor, data.settings.theme, ready, setAccent]);
 
   useEffect(() => {
     setOnline(navigator.onLine);
@@ -510,7 +523,7 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
       id: createId("space"),
       name,
       description: getFormValue(formData, "description"),
-      icon: getFormValue(formData, "icon") || "sparkles",
+      icon: getFormValue(formData, "icon") || "general",
       color: getFormValue(formData, "color") || "#4f46e5",
       createdAt,
       updatedAt: createdAt,
@@ -749,7 +762,7 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
   };
 
   const updateTheme = (theme: NexoData["settings"]["theme"]) => {
-    setTheme(theme);
+    applyTheme(theme);
     setData((current) => ({ ...current, settings: { ...current.settings, theme } }));
   };
 
@@ -1928,8 +1941,8 @@ function SpacesView({
                       type="radio"
                       value={option.value}
                     />
-                    <span className="nexo-surface-sm flex h-10 items-center justify-center rounded-xl text-[var(--muted)] transition peer-checked:bg-[var(--primary)] peer-checked:text-[var(--primary-foreground)] peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--primary)]">
-                      <Icon aria-hidden className="h-5 w-5" />
+                    <span className="nexo-surface-sm flex h-10 items-center justify-center rounded-xl border border-[var(--border)] text-[var(--foreground)] transition peer-checked:border-[var(--primary)] peer-checked:bg-[var(--primary)] peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--primary)]">
+                      <Icon aria-hidden className="h-5 w-5" strokeWidth={2.25} />
                       <span className="sr-only">{option.label}</span>
                     </span>
                   </label>
