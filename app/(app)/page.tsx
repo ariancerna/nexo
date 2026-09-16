@@ -29,7 +29,7 @@ const features = [
   },
 ];
 
-const pillars = ["PWA instalable", "Supabase Auth", "Workspace privado", "Diseño responsive"];
+const pillars = ["PWA instalable", "Acceso seguro", "Workspace privado", "Diseño responsive"];
 
 export default async function HomePage() {
   if (getOptionalSupabasePublicEnv()) {
@@ -177,8 +177,8 @@ function LandingPage() {
             <p className="text-sm font-bold uppercase tracking-[0.14em] text-[var(--primary)]">Arquitectura preparada</p>
             <h2 className="mt-3 font-display text-3xl font-black leading-tight">Funcional por diseño, no sólo bonito.</h2>
             <p className="mt-4 text-base leading-7 text-[var(--muted)]">
-              La interfaz ya está conectada a Supabase para autenticación, perfil, datos del workspace y storage. La
-              landing mantiene la entrada pública, mientras el espacio privado se abre sólo con sesión activa.
+              Tu información se mantiene sincronizada y protegida en la nube. La entrada pública presenta Nexo,
+              mientras el espacio privado se abre sólo con una sesión activa.
             </p>
           </div>
           <div className="rounded-[28px] bg-[var(--primary)] p-6 text-[var(--primary-foreground)] shadow-[0_20px_55px_color-mix(in_srgb,var(--primary)_28%,transparent)] sm:p-8">

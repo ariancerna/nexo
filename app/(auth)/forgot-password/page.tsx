@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ArrowRight, Info } from "lucide-react";
 
 import { sendPasswordReset } from "@/app/auth/actions";
 import { AuthCard, EmailField } from "@/components/auth/auth-card";
@@ -19,15 +20,20 @@ export default async function ForgotPasswordPage({
         </Link>
       }
       message={message}
-      showGoogle={false}
-      subtitle="Te enviaremos un enlace para volver a entrar a tu cuenta."
-      title="Recuperar contraseña"
+      showSocial={false}
+      subtitle="Ingresa el correo asociado a tu cuenta y te enviaremos un enlace seguro para restablecerla."
+      title="¿Olvidaste tu contraseña?"
     >
       <form action={sendPasswordReset} className="space-y-4">
-        <EmailField />
-        <Button className="w-full" type="submit" variant="primary">
-          Enviar instrucciones
+        <EmailField label="Correo electrónico registrado" />
+        <Button className="w-full rounded-xl" type="submit" variant="primary">
+          Enviar enlace de recuperación
+          <ArrowRight aria-hidden className="h-4 w-4" />
         </Button>
+        <div className="flex gap-3 rounded-xl bg-[var(--surface-container-low)] p-4 text-xs leading-5 text-[var(--muted)]">
+          <Info aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-[var(--primary)]" />
+          Si creaste tu cuenta con Google o Microsoft, puedes iniciar sesión directamente con ese proveedor.
+        </div>
       </form>
     </AuthCard>
   );

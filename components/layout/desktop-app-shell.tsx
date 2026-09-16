@@ -95,8 +95,8 @@ export function DesktopAppShell() {
                 AC
               </div>
               <div>
-                <p className="text-sm font-bold">Arian Cerna</p>
-                <p className="text-xs text-[var(--muted-soft)]">@arian</p>
+                <p className="text-sm font-bold">Usuario Nexo</p>
+                <p className="text-xs text-[var(--muted-soft)]">@tu-usuario</p>
               </div>
             </div>
           </div>
@@ -107,7 +107,7 @@ export function DesktopAppShell() {
         <header className="sticky top-0 z-20 flex items-center justify-between bg-[color-mix(in_srgb,var(--surface)_86%,transparent)] px-8 py-3 shadow-[0_4px_12px_var(--shadow-dark-soft)] backdrop-blur-md">
           <div className="flex items-center gap-6">
             <div>
-              <h1 className="font-display text-lg font-bold">Buenas tardes, Arian</h1>
+              <h1 className="font-display text-lg font-bold">Buenas tardes</h1>
               <p className="text-sm text-[var(--muted)]">Esto es lo que tienes para hoy</p>
             </div>
             <button className="nexo-inset hidden w-80 items-center justify-between rounded-2xl px-4 py-2 text-sm text-[var(--muted)] md:flex">

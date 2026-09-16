@@ -13,7 +13,7 @@ function authRedirect(path: string, message: string): never {
 
 function requireBackend() {
   if (!getOptionalSupabasePublicEnv()) {
-    authRedirect(authRoutes.login, "Configura Supabase en .env.local antes de iniciar sesión.");
+    authRedirect(authRoutes.login, "El servicio de acceso no está disponible en este momento.");
   }
 }
 
@@ -61,10 +61,19 @@ export async function signUpWithPassword(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const fullName = String(formData.get("fullName") ?? "").trim();
+  const acceptedTerms = formData.get("terms") === "on";
   const siteUrl = await getSiteUrl();
 
   if (!email || !password) {
     authRedirect(authRoutes.register, "Escribe tu correo y una contraseña.");
+  }
+
+  if (!acceptedTerms) {
+    authRedirect(authRoutes.register, "Debes aceptar los términos y la política de privacidad.");
+  }
+
+  if (fullName.length > 80) {
+    authRedirect(authRoutes.register, "El nombre es demasiado largo.");
   }
 
   const supabase = await createSupabaseServerClient();
@@ -87,37 +96,43 @@ export async function signUpWithPassword(formData: FormData) {
     redirect(authRoutes.onboarding);
   }
 
-  authRedirect(authRoutes.login, "Cuenta creada. Revisa tu correo si Supabase requiere confirmación.");
+  authRedirect(authRoutes.login, "Cuenta creada. Revisa tu correo para confirmar el acceso.");
 }
 
-export async function signInWithGoogle() {
+async function signInWithProvider(provider: "google" | "azure", label: "Google" | "Microsoft") {
   requireBackend();
 
   const siteUrl = await getSiteUrl();
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: "google",
+    provider,
     options: {
       redirectTo: `${siteUrl}/auth/callback?next=/onboarding`,
+      scopes: provider === "azure" ? "email" : undefined,
     },
   });
 
   const providerUrl = data.url;
 
   if (error || !providerUrl) {
-    authRedirect(authRoutes.login, "No pudimos abrir Google OAuth. Revisa la configuración en Supabase.");
+    authRedirect(authRoutes.login, `No pudimos iniciar sesión con ${label}. Inténtalo nuevamente.`);
   }
 
   const providerReady = await providerEndpointIsReady(providerUrl);
 
   if (!providerReady) {
-    authRedirect(
-      authRoutes.login,
-      "Google OAuth aún no está activo en Supabase. Activa el provider Google con Client ID y Secret.",
-    );
+    authRedirect(authRoutes.login, `El acceso con ${label} todavía no está habilitado.`);
   }
 
   redirect(providerUrl);
+}
+
+export async function signInWithGoogle() {
+  return signInWithProvider("google", "Google");
+}
+
+export async function signInWithMicrosoft() {
+  return signInWithProvider("azure", "Microsoft");
 }
 
 export async function sendPasswordReset(formData: FormData) {
@@ -186,6 +201,10 @@ export async function completeOnboarding(formData: FormData) {
 
   if (userError || !userData.user) {
     redirect(authRoutes.login);
+  }
+
+  if (username && !/^[a-z0-9][a-z0-9-]{2,19}$/i.test(username)) {
+    authRedirect(authRoutes.onboarding, "El usuario debe tener entre 3 y 20 caracteres y usar sólo letras, números o guiones.");
   }
 
   const { error } = await supabase.from("profiles").upsert({

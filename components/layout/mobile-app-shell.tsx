@@ -28,7 +28,7 @@ export function MobileAppShell() {
       <main className="flex-1 space-y-5 px-4 pt-5">
         <section className="flex items-start justify-between gap-3">
           <div>
-            <h1 className="font-display text-3xl font-bold leading-tight tracking-normal">Buenas tardes, Arian</h1>
+            <h1 className="font-display text-3xl font-bold leading-tight tracking-normal">Buenas tardes</h1>
             <p className="mt-1 text-sm text-[var(--muted)]">Esto es lo que tienes para hoy.</p>
           </div>
           <div className="nexo-inset shrink-0 rounded-full px-3 py-1 text-[0.68rem] font-bold text-[var(--muted)]">

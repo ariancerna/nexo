@@ -1,9 +1,10 @@
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 
 import { signInWithPassword } from "@/app/auth/actions";
 import { AuthCard, EmailField } from "@/components/auth/auth-card";
+import { PasswordField } from "@/components/auth/password-field";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { redirectAuthenticatedUser } from "@/lib/auth/session";
 
 export default async function LoginPage({
@@ -26,21 +27,14 @@ export default async function LoginPage({
       }
       message={message}
       subtitle="Tu espacio, todo en un solo lugar."
-      title="Bienvenido a Nexo"
+      title="Nexo"
     >
       <form action={signInWithPassword} className="space-y-4">
         <EmailField />
-        <label className="block space-y-2">
-          <span className="text-sm font-bold">Contraseña</span>
-          <Input autoComplete="current-password" className="auth-input" name="password" required type="password" />
-        </label>
-        <div className="flex items-center justify-between text-sm">
-          <Link className="font-semibold text-[var(--primary)]" href="/forgot-password">
-            ¿Olvidaste tu contraseña?
-          </Link>
-        </div>
-        <Button className="w-full" type="submit" variant="primary">
+        <PasswordField showForgot />
+        <Button className="w-full rounded-xl" type="submit" variant="primary">
           Iniciar sesión
+          <ArrowRight aria-hidden className="h-4 w-4" />
         </Button>
       </form>
     </AuthCard>

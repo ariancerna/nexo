@@ -2,17 +2,19 @@
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
-export const accentOptions = [
-  "indigo",
-  "blue",
-  "green",
-  "emerald",
-  "orange",
-  "red",
-  "pink",
+export const accentPalette = [
+  { key: "indigo", label: "Índigo", color: "#4f46e5" },
+  { key: "blue", label: "Azul", color: "#0284c7" },
+  { key: "green", label: "Verde", color: "#16a34a" },
+  { key: "emerald", label: "Esmeralda", color: "#059669" },
+  { key: "orange", label: "Naranja", color: "#d97706" },
+  { key: "red", label: "Rojo", color: "#dc2626" },
+  { key: "pink", label: "Rosa", color: "#db2777" },
 ] as const;
 
-export type AccentColor = (typeof accentOptions)[number];
+export const accentOptions = accentPalette.map((option) => option.key);
+
+export type AccentColor = (typeof accentPalette)[number]["key"];
 
 type AccentContextValue = {
   accent: AccentColor;

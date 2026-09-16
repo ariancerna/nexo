@@ -6,6 +6,7 @@ import { defaultNexoData, createId } from "@/lib/nexo/default-data";
 import {
   createDriveFileSignedUrl,
   createNexoSupabaseClient,
+  deleteDriveFileFromSupabase,
   getSupabaseUserId,
   normalizeNexoDataForSupabase,
   saveNexoDataToSupabase,
@@ -71,7 +72,7 @@ export function useNexoData() {
       const localData = normalizeNexoDataForSupabase(readLocalData());
       setData(localData);
       setSyncStatus("loading");
-      setSyncMessage("Cargando Supabase");
+      setSyncMessage("Cargando tu espacio");
 
       try {
         const supabase = createNexoSupabaseClient();
@@ -95,7 +96,7 @@ export function useNexoData() {
           lastRemoteSnapshot.current = snapshot;
           latestSnapshot.current = snapshot;
           setSyncStatus("synced");
-          setSyncMessage("Sincronizado con Supabase");
+          setSyncMessage("Sincronizado");
         }
       } catch (error) {
         if (!cancelled) {
@@ -153,7 +154,7 @@ export function useNexoData() {
             if (mounted.current && latestSnapshot.current === nextSnapshot) {
               window.localStorage.setItem(storageKey, nextSnapshot);
               setSyncStatus("synced");
-              setSyncMessage("Sincronizado con Supabase");
+              setSyncMessage("Sincronizado");
             }
           } catch (error: unknown) {
             if (mounted.current && latestSnapshot.current === snapshot) {
@@ -209,6 +210,21 @@ export function useNexoData() {
         } catch (error) {
           setSyncStatus("error");
           setSyncMessage(error instanceof Error ? error.message : "No se pudo abrir el archivo");
+        }
+      },
+      deleteDriveFile: async (file: DriveFile) => {
+        try {
+          if (file.storagePath) {
+            await deleteDriveFileFromSupabase(file.storagePath);
+          }
+
+          setData((current) => ({
+            ...current,
+            driveFiles: current.driveFiles.filter((currentFile) => currentFile.id !== file.id),
+          }));
+        } catch (error) {
+          setSyncStatus("error");
+          setSyncMessage(error instanceof Error ? error.message : "No se pudo eliminar el archivo");
         }
       },
       resetData: () => setData(normalizeNexoDataForSupabase(defaultNexoData)),

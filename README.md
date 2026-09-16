@@ -1,18 +1,17 @@
 # Nexo
 
-Nexo is a personal digital hub built as a PWA. It organizes notes, files, tasks, calendar events, spaces, saved links, lists, focus sessions, profile-ready settings, and app preferences from one responsive workspace.
+Nexo is a responsive personal hub PWA for notes, files, tasks, calendar events, spaces, saved links, lists, focus sessions, and visual preferences.
 
-The current version is functional without backend credentials: data is persisted locally in the browser so the app can be used immediately. Supabase clients are already prepared for the next phase: cloud auth, database tables, RLS, and storage.
+The application uses Supabase Auth, PostgreSQL with row-level security, and private Storage for cloud-backed user data. A local browser copy keeps the workspace usable while the network is unavailable and syncs again when the connection returns.
 
 ## Stack
 
 - Next.js App Router
-- React + TypeScript
+- React and TypeScript
 - Tailwind CSS
-- Supabase
-- shadcn/ui-style local primitives
-- Lucide Icons
-- PWA manifest, service worker, and offline page
+- Supabase Auth, PostgreSQL, and Storage
+- Local UI primitives and Lucide icons
+- PWA manifest, service worker, and offline fallback
 
 ## Run Locally
 
@@ -29,11 +28,22 @@ Create `.env.local` from `.env.example`:
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ```
 
-Never expose a Supabase service role key in the browser.
+Google and Microsoft OAuth credentials belong in the provider configuration of the authentication dashboard, never in a public browser environment variable.
+
+## Security Model
+
+- Only the public project URL and publishable key are exposed to the browser.
+- A service-role key is not used by the application and must never be prefixed with `NEXT_PUBLIC_`.
+- Row-level security limits every data table and Storage object to its authenticated owner.
+- Session cookies and token refresh are handled by `@supabase/ssr`.
+- User-provided external links accept only `http` and `https` protocols.
+- Security response headers prevent framing, MIME sniffing, and unnecessary browser permissions.
+
+Public keys are intentionally not obfuscated. Access control is enforced by authentication and row-level security rather than hiding client configuration.
 
 ## Available Scripts
 
@@ -42,32 +52,28 @@ npm run dev
 npm run lint
 npm run typecheck
 npm run build
-npm run start
+npm run test:e2e
 ```
 
 ## Current Functionality
 
-- Responsive desktop sidebar and mobile bottom navigation.
-- Local CRUD for notes, tasks, spaces, calendar events, saved links, lists, and file metadata.
-- Focus timer with pause, resume, reset, and completed session history.
-- Global search across local workspace data.
-- Light, dark, and system theme preference.
-- Configurable accent color and enabled modules.
-- PWA install metadata, app shell cache, and offline fallback page.
+- Password, Google, and Microsoft-ready authentication flows with onboarding and password recovery.
+- Cloud-synced CRUD for notes, tasks, spaces, events, saved links, lists, and private files.
+- Focus timer with pause, resume, reset, and completed-session history.
+- Global search across workspace data.
+- Light, dark, and system themes with configurable accent colors and enabled modules.
+- Responsive workspace, installable PWA metadata, and an offline fallback.
+
+Microsoft sign-in requires an Azure/Entra application to be connected and enabled in the authentication provider settings. Until that external configuration exists, Nexo returns a controlled availability message instead of a raw provider error.
 
 ## Project Structure
 
-- `app/`: App Router routes, metadata, layout, and manifest.
-- `components/workspace/`: functional Nexo workspace.
-- `components/layout/`: application shell entry point.
-- `components/providers/`: theme and accent providers.
-- `components/ui/`: Nexo-styled reusable UI primitives.
-- `hooks/`: local persistent workspace state.
-- `lib/nexo/`: seed data and helpers.
+- `app/`: routes, authentication actions, metadata, and PWA entry points.
+- `components/workspace/`: the functional Nexo workspace.
+- `components/auth/`: reusable authentication UI.
+- `components/ui/`: local accessible UI primitives.
+- `hooks/`: local persistence and cloud synchronization.
+- `lib/nexo/`: workspace seed data and persistence helpers.
 - `lib/supabase/`: browser and server Supabase clients.
+- `supabase/migrations/`: database, RLS, grants, and Storage policies.
 - `types/`: shared TypeScript models.
-- `public/`: service worker, offline page, and icon.
-
-## Supabase Roadmap
-
-The next phase should replace local persistence with Supabase Auth, PostgreSQL tables, RLS policies, and Storage while preserving the current UI and local domain model.

@@ -1,21 +1,29 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTheme } from "next-themes";
 import Image from "next/image";
 import {
   Bookmark,
+  BriefcaseBusiness,
   CalendarDays,
+  Check,
   CheckCircle2,
   Circle,
+  Code2,
+  Dumbbell,
   ExternalLink,
   FileText,
   FolderOpen,
+  GraduationCap,
+  Heart,
   Home,
   ListChecks,
+  Lightbulb,
   LogOut,
   Moon,
   Pause,
+  Palette,
   Play,
   Plus,
   RotateCcw,
@@ -31,10 +39,11 @@ import {
 
 import { signOut } from "@/app/auth/actions";
 import type { WorkspaceUser } from "@/components/layout/app-shell";
-import { useAccent, type AccentColor, accentOptions } from "@/components/providers/accent-provider";
+import { accentPalette, useAccent, type AccentColor } from "@/components/providers/accent-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { FeedbackDialog, type FeedbackDialogState } from "@/components/ui/feedback-dialog";
 import { Switch } from "@/components/ui/switch";
 import { useNexoData, type NexoSyncStatus } from "@/hooks/use-nexo-data";
 import { createId, formatBytes } from "@/lib/nexo/default-data";
@@ -70,6 +79,17 @@ const mobileModules: ModuleKey[] = ["dashboard", "notes", "spaces", "tasks", "se
 const taskStatuses: TaskStatus[] = ["todo", "in_progress", "completed"];
 const priorities: Priority[] = ["low", "medium", "high"];
 const savedTypes: SavedItemType[] = ["article", "video", "repository", "document", "link", "other"];
+const spaceIconOptions = [
+  { value: "sparkles", label: "General", icon: Sparkles, aliases: [] },
+  { value: "study", label: "Estudio", icon: GraduationCap, aliases: ["🎓"] },
+  { value: "code", label: "Programación", icon: Code2, aliases: ["💻"] },
+  { value: "home", label: "Hogar", icon: Home, aliases: ["🏠"] },
+  { value: "work", label: "Trabajo", icon: BriefcaseBusiness, aliases: ["💼"] },
+  { value: "health", label: "Salud", icon: Heart, aliases: ["❤️", "❤"] },
+  { value: "fitness", label: "Ejercicio", icon: Dumbbell, aliases: ["🏋️"] },
+  { value: "creative", label: "Creatividad", icon: Palette, aliases: ["🎨"] },
+  { value: "ideas", label: "Ideas", icon: Lightbulb, aliases: ["💡"] },
+] as const;
 
 type FocusState =
   | { status: "idle"; durationSeconds: number; remainingSeconds: number; startedAt: null; taskId: null; spaceId: null }
@@ -131,11 +151,28 @@ function countActiveModules(data: NexoData) {
   return data.settings.enabledModules.filter((module) => module !== "dashboard" && module !== "settings").length;
 }
 
+function SpaceIcon({ value, className = "h-5 w-5" }: { value: string; className?: string }) {
+  const option = spaceIconOptions.find((item) => item.value === value || item.aliases.some((alias) => alias === value));
+  const Icon = option?.icon ?? Sparkles;
+  return <Icon aria-hidden className={className} />;
+}
+
 export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
-  const { data, ready, syncStatus, syncMessage, setData, resetData, uploadDriveFiles, openDriveFile } = useNexoData();
+  const {
+    data,
+    ready,
+    syncStatus,
+    syncMessage,
+    setData,
+    resetData,
+    uploadDriveFiles,
+    openDriveFile,
+    deleteDriveFile,
+  } = useNexoData();
   const [activeModule, setActiveModule] = useState<ModuleKey>("dashboard");
   const [query, setQuery] = useState("");
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [dialog, setDialog] = useState<FeedbackDialogState | null>(null);
   const [online, setOnline] = useState(true);
   const [nowTick, setNowTick] = useState(Date.now());
   const [focus, setFocus] = useState<FocusState>({
@@ -148,6 +185,23 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
   });
   const { setTheme } = useTheme();
   const { accent, setAccent } = useAccent();
+  const closeDialog = useCallback(() => setDialog(null), []);
+
+  const requestRemoval = (label: string, onConfirm: () => void | Promise<void>) => {
+    setDialog({
+      title: "Confirmar eliminación",
+      description: `Vas a eliminar ${label}. Esta acción no se puede deshacer.`,
+      variant: "danger",
+      confirmLabel: "Eliminar",
+      onConfirm,
+    });
+  };
+
+  useEffect(() => {
+    if (!ready) return;
+    setTheme(data.settings.theme);
+    setAccent(data.settings.accentColor);
+  }, [data.settings.accentColor, data.settings.theme, ready, setAccent, setTheme]);
 
   useEffect(() => {
     setOnline(navigator.onLine);
@@ -313,6 +367,12 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
     }));
   };
 
+  const deleteTask = (task: Task) => {
+    requestRemoval(`la tarea “${task.title}”`, () => {
+      setData((current) => ({ ...current, tasks: current.tasks.filter((item) => item.id !== task.id) }));
+    });
+  };
+
   const addSpace = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
@@ -328,7 +388,7 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
       id: createId("space"),
       name,
       description: getFormValue(formData, "description"),
-      icon: getFormValue(formData, "icon") || "•",
+      icon: getFormValue(formData, "icon") || "sparkles",
       color: getFormValue(formData, "color") || "#4f46e5",
       createdAt,
       updatedAt: createdAt,
@@ -351,6 +411,15 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
     const createdAt = new Date().toISOString();
     const startsAt = new Date(getFormValue(formData, "startsAt")).toISOString();
     const endsAt = new Date(getFormValue(formData, "endsAt")).toISOString();
+
+    if (new Date(endsAt).getTime() <= new Date(startsAt).getTime()) {
+      setDialog({
+        title: "Revisa el horario",
+        description: "La hora de finalización debe ser posterior al inicio.",
+        variant: "info",
+      });
+      return;
+    }
     const calendarEvent: CalendarEvent = {
       id: createId("event"),
       title,
@@ -366,6 +435,30 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
     form.reset();
   };
 
+  const deleteEvent = (calendarEvent: CalendarEvent) => {
+    requestRemoval(`el evento “${calendarEvent.title}”`, () => {
+      setData((current) => ({ ...current, events: current.events.filter((item) => item.id !== calendarEvent.id) }));
+    });
+  };
+
+  const deleteSpace = (space: Space) => {
+    requestRemoval(`el espacio “${space.name}”`, () => {
+      setData((current) => ({
+        ...current,
+        spaces: current.spaces.filter((item) => item.id !== space.id),
+        notes: current.notes.map((item) => (item.spaceId === space.id ? { ...item, spaceId: null } : item)),
+        tasks: current.tasks.map((item) => (item.spaceId === space.id ? { ...item, spaceId: null } : item)),
+        events: current.events.map((item) => (item.spaceId === space.id ? { ...item, spaceId: null } : item)),
+        savedItems: current.savedItems.map((item) => (item.spaceId === space.id ? { ...item, spaceId: null } : item)),
+        lists: current.lists.map((item) => (item.spaceId === space.id ? { ...item, spaceId: null } : item)),
+        driveFiles: current.driveFiles.map((item) => (item.spaceId === space.id ? { ...item, spaceId: null } : item)),
+        focusSessions: current.focusSessions.map((item) =>
+          item.spaceId === space.id ? { ...item, spaceId: null } : item,
+        ),
+      }));
+    });
+  };
+
   const addSavedItem = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
@@ -376,10 +469,25 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
       return;
     }
 
+    let normalizedUrl: string;
+
+    try {
+      const parsedUrl = new URL(url);
+      if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") throw new Error("unsupported protocol");
+      normalizedUrl = parsedUrl.toString();
+    } catch {
+      setDialog({
+        title: "Enlace no válido",
+        description: "Usa una dirección completa que comience con http:// o https://.",
+        variant: "info",
+      });
+      return;
+    }
+
     const savedItem: SavedItem = {
       id: createId("saved"),
-      url,
-      title: getFormValue(formData, "title") || url,
+      url: normalizedUrl,
+      title: getFormValue(formData, "title") || normalizedUrl,
       description: getFormValue(formData, "description"),
       type: (getFormValue(formData, "type") as SavedItemType) || "link",
       spaceId: getFormValue(formData, "spaceId") || null,
@@ -389,6 +497,24 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
 
     setData((current) => ({ ...current, savedItems: [savedItem, ...current.savedItems] }));
     form.reset();
+  };
+
+  const toggleSavedFavorite = (itemId: string) => {
+    setData((current) => ({
+      ...current,
+      savedItems: current.savedItems.map((item) =>
+        item.id === itemId ? { ...item, isFavorite: !item.isFavorite } : item,
+      ),
+    }));
+  };
+
+  const deleteSavedItem = (item: SavedItem) => {
+    requestRemoval(`el enlace “${item.title}”`, () => {
+      setData((current) => ({
+        ...current,
+        savedItems: current.savedItems.filter((currentItem) => currentItem.id !== item.id),
+      }));
+    });
   };
 
   const addList = (event: React.FormEvent<HTMLFormElement>) => {
@@ -441,6 +567,16 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
     form.reset();
   };
 
+  const deleteList = (list: NexoList) => {
+    requestRemoval(`la lista “${list.name}” y sus elementos`, () => {
+      setData((current) => ({
+        ...current,
+        lists: current.lists.filter((item) => item.id !== list.id),
+        listItems: current.listItems.filter((item) => item.listId !== list.id),
+      }));
+    });
+  };
+
   const addDriveFiles = async (files: FileList | null) => {
     if (!files?.length) {
       return;
@@ -449,6 +585,10 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
     const nextFiles = await uploadDriveFiles(files);
 
     setData((current) => ({ ...current, driveFiles: [...nextFiles, ...current.driveFiles] }));
+  };
+
+  const removeDriveFile = async (file: DriveFile) => {
+    requestRemoval(`el archivo “${file.name}”`, () => deleteDriveFile(file));
   };
 
   const toggleModule = (moduleKey: ModuleKey) => {
@@ -588,7 +728,12 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
                 type="button"
               >
                 <span className="flex items-center gap-2.5">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: space.color }} />
+                  <span
+                    className="flex h-7 w-7 items-center justify-center rounded-lg"
+                    style={{ backgroundColor: `${space.color}20`, color: space.color }}
+                  >
+                    <SpaceIcon className="h-4 w-4" value={space.icon} />
+                  </span>
                   {space.name}
                 </span>
                 <span className="nexo-inset rounded-lg px-2 py-0.5 text-[0.68rem] font-bold text-[var(--primary)]">
@@ -640,6 +785,19 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
           </div>
         </div>
 
+        <select
+          aria-label="Cambiar módulo"
+          className="nexo-inset mt-3 h-10 w-full rounded-xl px-3 text-sm font-semibold outline-none lg:hidden"
+          onChange={(event) => setActiveModule(event.target.value as ModuleKey)}
+          value={activeModule}
+        >
+          {visibleModules.map((module) => (
+            <option key={module.key} value={module.key}>
+              {module.label}
+            </option>
+          ))}
+        </select>
+
         {mobileSearchOpen ? (
           <label className="nexo-inset mt-3 flex items-center gap-2 rounded-2xl px-4 py-2 text-sm text-[var(--muted)] md:hidden">
             <Search aria-hidden className="h-4 w-4" />
@@ -682,12 +840,14 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
             <NotesView
               addNote={addNote}
               notes={notes}
-              onDeleteNote={(noteId) =>
-                setData((current) => ({
-                  ...current,
-                  notes: current.notes.map((note) => (note.id === noteId ? { ...note, isTrashed: true } : note)),
-                }))
-              }
+              onDeleteNote={(note) => {
+                requestRemoval(`la nota “${note.title}”`, () => {
+                  setData((current) => ({
+                    ...current,
+                    notes: current.notes.filter((currentNote) => currentNote.id !== note.id),
+                  }));
+                });
+              }}
               onToggleFavorite={(noteId) =>
                 setData((current) => ({
                   ...current,
@@ -701,17 +861,31 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
             />
           ) : null}
           {activeModule === "tasks" ? (
-            <TasksView addTask={addTask} onUpdateStatus={updateTaskStatus} spaces={data.spaces} tasks={data.tasks} />
+            <TasksView
+              addTask={addTask}
+              onDelete={deleteTask}
+              onUpdateStatus={updateTaskStatus}
+              spaces={data.spaces}
+              tasks={data.tasks}
+            />
           ) : null}
           {activeModule === "drive" ? (
-            <DriveView driveFiles={driveFiles} onOpen={openDriveFile} onUpload={addDriveFiles} />
+            <DriveView driveFiles={driveFiles} onDelete={removeDriveFile} onOpen={openDriveFile} onUpload={addDriveFiles} />
           ) : null}
-          {activeModule === "calendar" ? <CalendarView addEvent={addEvent} events={data.events} spaces={data.spaces} /> : null}
+          {activeModule === "calendar" ? (
+            <CalendarView addEvent={addEvent} events={data.events} onDelete={deleteEvent} spaces={data.spaces} />
+          ) : null}
           {activeModule === "spaces" ? (
-            <SpacesView addSpace={addSpace} notes={notes} spaces={data.spaces} tasks={data.tasks} />
+            <SpacesView addSpace={addSpace} notes={notes} onDelete={deleteSpace} spaces={data.spaces} tasks={data.tasks} />
           ) : null}
           {activeModule === "saved" ? (
-            <SavedView addSavedItem={addSavedItem} items={data.savedItems} spaces={data.spaces} />
+            <SavedView
+              addSavedItem={addSavedItem}
+              items={data.savedItems}
+              onDelete={deleteSavedItem}
+              onToggleFavorite={toggleSavedFavorite}
+              spaces={data.spaces}
+            />
           ) : null}
           {activeModule === "lists" ? (
             <ListsView
@@ -719,6 +893,7 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
               addListItem={addListItem}
               items={data.listItems}
               lists={data.lists}
+              onDeleteList={deleteList}
               setData={setData}
               spaces={data.spaces}
             />
@@ -739,7 +914,15 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
               accent={accent}
               activeModules={countActiveModules(data)}
               modules={modules}
-              onReset={resetData}
+              onReset={() => {
+                setDialog({
+                  title: "Restablecer workspace",
+                  description: "Tus datos actuales serán reemplazados por los ejemplos iniciales de Nexo.",
+                  variant: "danger",
+                  confirmLabel: "Restablecer",
+                  onConfirm: resetData,
+                });
+              }}
               settings={data.settings}
               toggleModule={toggleModule}
               updateAccent={updateAccent}
@@ -750,7 +933,12 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
       </main>
 
       <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 mx-auto flex max-w-[520px] items-center justify-around rounded-t-3xl bg-[var(--surface)] px-2 pt-2 shadow-[0_-4px_20px_var(--shadow-dark-soft)] lg:hidden">
-        {mobileModules.map((moduleKey) => {
+        {mobileModules
+          .filter(
+            (moduleKey) =>
+              moduleKey === "dashboard" || moduleKey === "settings" || data.settings.enabledModules.includes(moduleKey),
+          )
+          .map((moduleKey) => {
           const moduleItem = modules.find((item) => item.key === moduleKey);
           if (!moduleItem) {
             return null;
@@ -774,8 +962,9 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
               <span className="mt-0.5 text-[0.68rem] font-bold">{moduleItem.label}</span>
             </button>
           );
-        })}
+          })}
       </nav>
+      <FeedbackDialog dialog={dialog} onClose={closeDialog} />
     </div>
   );
 }
@@ -793,7 +982,7 @@ function ProfileFooter({
 }) {
   const statusLabel =
     syncStatus === "synced"
-      ? "Supabase activo"
+      ? "Nube activa"
       : syncStatus === "syncing" || syncStatus === "loading"
         ? "Sincronizando"
         : syncStatus === "error"
@@ -990,7 +1179,7 @@ function DashboardView({
           <CardHeader>
             <div>
               <CardTitle>Drive</CardTitle>
-            <CardDescription>Archivos y metadata sincronizados con Supabase Storage.</CardDescription>
+              <CardDescription>Archivos y detalles sincronizados de forma segura.</CardDescription>
             </div>
             <Button onClick={() => onNavigate("drive")} size="sm">
               Subir
@@ -1052,7 +1241,7 @@ function NotesView({
   addNote: (event: React.FormEvent<HTMLFormElement>) => void;
   onUpdateContent: (noteId: string, content: string) => void;
   onToggleFavorite: (noteId: string) => void;
-  onDeleteNote: (noteId: string) => void;
+  onDeleteNote: (note: Note) => void;
 }) {
   return (
     <div className="grid gap-6 xl:grid-cols-[360px_1fr]">
@@ -1086,7 +1275,7 @@ function NotesView({
                   <Button aria-label="Favorito" onClick={() => onToggleFavorite(note.id)} size="icon" variant="ghost">
                     <Star className="h-4 w-4" fill={note.isFavorite ? "currentColor" : "none"} />
                   </Button>
-                  <Button aria-label="Eliminar" onClick={() => onDeleteNote(note.id)} size="icon" variant="ghost">
+                  <Button aria-label={`Eliminar ${note.title}`} onClick={() => onDeleteNote(note)} size="icon" title="Eliminar nota" variant="ghost">
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
@@ -1100,6 +1289,7 @@ function NotesView({
             </Card>
           );
         })}
+        {!notes.length ? <EmptyState icon={FileText} message="Todavía no hay notas. Crea la primera desde el formulario." /> : null}
       </div>
     </div>
   );
@@ -1109,18 +1299,20 @@ function TasksView({
   tasks,
   spaces,
   addTask,
+  onDelete,
   onUpdateStatus,
 }: {
   tasks: Task[];
   spaces: Space[];
   addTask: (event: React.FormEvent<HTMLFormElement>) => void;
+  onDelete: (task: Task) => void;
   onUpdateStatus: (taskId: string, status: TaskStatus) => void;
 }) {
   return (
     <div className="space-y-6">
       <Card className="p-5">
         <CardTitle>Nueva tarea</CardTitle>
-        <form className="mt-4 grid gap-3 lg:grid-cols-[1fr_1fr_160px_160px_auto]" onSubmit={addTask}>
+        <form className="mt-4 grid gap-3 xl:grid-cols-[1fr_1fr_140px_160px_180px_auto]" onSubmit={addTask}>
           <Input name="title" placeholder="Título" required />
           <Input name="description" placeholder="Descripción" />
           <select className="nexo-inset h-11 rounded-2xl px-3 text-sm outline-none" defaultValue="medium" name="priority">
@@ -1131,6 +1323,7 @@ function TasksView({
             ))}
           </select>
           <Input name="dueDate" type="date" defaultValue={todayInputValue()} />
+          <SpaceSelect spaces={spaces} />
           <Button type="submit" variant="primary">
             Crear
           </Button>
@@ -1162,7 +1355,7 @@ function TasksView({
                       <p className="mt-3 text-xs text-[var(--muted)]">
                         {space?.name ?? "Sin espacio"} · {task.dueDate || "Sin fecha"}
                       </p>
-                      <div className="mt-3 flex gap-2">
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
                         {taskStatuses.map((nextStatus) => (
                           <Button
                             key={nextStatus}
@@ -1173,10 +1366,23 @@ function TasksView({
                             {nextStatus === "todo" ? "Todo" : nextStatus === "in_progress" ? "Progreso" : "Lista"}
                           </Button>
                         ))}
+                        <Button
+                          aria-label={`Eliminar ${task.title}`}
+                          className="ml-auto"
+                          onClick={() => onDelete(task)}
+                          size="icon"
+                          title="Eliminar tarea"
+                          variant="ghost"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
                   );
                 })}
+              {!tasks.some((task) => task.status === status) ? (
+                <p className="py-8 text-center text-sm text-[var(--muted)]">Sin tareas en esta columna.</p>
+              ) : null}
             </div>
           </Card>
         ))}
@@ -1203,10 +1409,12 @@ function TaskRow({ task }: { task: Task }) {
 
 function DriveView({
   driveFiles,
+  onDelete,
   onOpen,
   onUpload,
 }: {
   driveFiles: DriveFile[];
+  onDelete: (file: DriveFile) => Promise<void>;
   onOpen: (file: DriveFile) => Promise<void>;
   onUpload: (files: FileList | null) => Promise<void>;
 }) {
@@ -1216,7 +1424,7 @@ function DriveView({
         <CardHeader>
           <div>
             <CardTitle>Drive</CardTitle>
-            <CardDescription>Sube archivos al bucket privado de Supabase y guarda su metadata en tu workspace.</CardDescription>
+            <CardDescription>Sube archivos a tu espacio privado y mantén sus detalles sincronizados.</CardDescription>
           </div>
           <label className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-2xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary-foreground)] nexo-primary-shadow">
             <Upload className="h-4 w-4" />
@@ -1241,19 +1449,31 @@ function DriveView({
             <p className="mt-2 text-sm text-[var(--muted)]">{formatBytes(file.size)}</p>
             <p className="text-xs text-[var(--muted-soft)]">{file.type}</p>
             <p className="mt-2 truncate text-xs text-[var(--muted-soft)]">
-              {file.storagePath ? "Supabase Storage" : "Metadata local"}
+              {file.storagePath ? "Guardado en la nube" : "Sólo en este dispositivo"}
             </p>
-            <Button
-              className="mt-4 w-full"
-              disabled={!file.storagePath}
-              onClick={() => void onOpen(file)}
-              size="sm"
-            >
-              <ExternalLink aria-hidden className="h-4 w-4" />
-              Abrir archivo
-            </Button>
+            <div className="mt-4 flex gap-2">
+              <Button
+                className="flex-1"
+                disabled={!file.storagePath}
+                onClick={() => void onOpen(file)}
+                size="sm"
+              >
+                <ExternalLink aria-hidden className="h-4 w-4" />
+                Abrir
+              </Button>
+              <Button
+                aria-label={`Eliminar ${file.name}`}
+                onClick={() => void onDelete(file)}
+                size="icon"
+                title="Eliminar archivo"
+                variant="ghost"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
           </Card>
         ))}
+        {!driveFiles.length ? <EmptyState icon={FolderOpen} message="No hay archivos. Sube uno para guardarlo de forma privada." /> : null}
       </div>
     </div>
   );
@@ -1263,10 +1483,12 @@ function CalendarView({
   events,
   spaces,
   addEvent,
+  onDelete,
 }: {
   events: CalendarEvent[];
   spaces: Space[];
   addEvent: (event: React.FormEvent<HTMLFormElement>) => void;
+  onDelete: (event: CalendarEvent) => void;
 }) {
   return (
     <div className="grid gap-6 xl:grid-cols-[360px_1fr]">
@@ -1301,9 +1523,20 @@ function CalendarView({
                     <h2 className="font-display text-lg font-bold">{event.title}</h2>
                     <p className="mt-1 text-sm text-[var(--muted)]">{event.location || "Sin ubicación"}</p>
                   </div>
-                  <span className="rounded-full bg-[var(--primary-soft)] px-3 py-1 text-xs font-bold text-[var(--primary-strong)]">
-                    {space?.name ?? "General"}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-[var(--primary-soft)] px-3 py-1 text-xs font-bold text-[var(--primary-strong)]">
+                      {space?.name ?? "General"}
+                    </span>
+                    <Button
+                      aria-label={`Eliminar ${event.title}`}
+                      onClick={() => onDelete(event)}
+                      size="icon"
+                      title="Eliminar evento"
+                      variant="ghost"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
                 <p className="mt-4 text-sm text-[var(--muted)]">
                   {formatDate(event.startsAt)} - {formatDate(event.endsAt)}
@@ -1311,6 +1544,7 @@ function CalendarView({
               </Card>
             );
           })}
+        {!events.length ? <EmptyState icon={CalendarDays} message="No hay eventos programados." /> : null}
       </div>
     </div>
   );
@@ -1321,11 +1555,13 @@ function SpacesView({
   notes,
   tasks,
   addSpace,
+  onDelete,
 }: {
   spaces: Space[];
   notes: Note[];
   tasks: Task[];
   addSpace: (event: React.FormEvent<HTMLFormElement>) => void;
+  onDelete: (space: Space) => void;
 }) {
   return (
     <div className="grid gap-6 xl:grid-cols-[360px_1fr]">
@@ -1334,7 +1570,29 @@ function SpacesView({
         <form className="mt-4 space-y-3" onSubmit={addSpace}>
           <Input name="name" placeholder="Nombre" required />
           <Input name="description" placeholder="Descripción" />
-          <Input name="icon" placeholder="Icono breve" />
+          <fieldset>
+            <legend className="mb-2 text-sm font-bold">Icono</legend>
+            <div className="grid grid-cols-5 gap-2">
+              {spaceIconOptions.map((option, index) => {
+                const Icon = option.icon;
+                return (
+                  <label className="cursor-pointer" key={option.value} title={option.label}>
+                    <input
+                      className="peer sr-only"
+                      defaultChecked={index === 0}
+                      name="icon"
+                      type="radio"
+                      value={option.value}
+                    />
+                    <span className="nexo-surface-sm flex h-10 items-center justify-center rounded-xl text-[var(--muted)] transition peer-checked:bg-[var(--primary)] peer-checked:text-[var(--primary-foreground)] peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--primary)]">
+                      <Icon aria-hidden className="h-5 w-5" />
+                      <span className="sr-only">{option.label}</span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
           <Input name="color" type="color" defaultValue="#4f46e5" />
           <Button className="w-full" type="submit" variant="primary">
             Crear espacio
@@ -1346,11 +1604,27 @@ function SpacesView({
           <Card className="p-5" key={space.id}>
             <div className="flex items-start justify-between gap-3">
               <div>
-                <span className="text-2xl">{space.icon}</span>
+                <span
+                  className="flex h-11 w-11 items-center justify-center rounded-xl"
+                  style={{ backgroundColor: `${space.color}20`, color: space.color }}
+                >
+                  <SpaceIcon value={space.icon} />
+                </span>
                 <h2 className="mt-3 font-display text-lg font-bold">{space.name}</h2>
                 <p className="mt-1 text-sm text-[var(--muted)]">{space.description}</p>
               </div>
-              <span className="h-4 w-4 rounded-full" style={{ backgroundColor: space.color }} />
+              <div className="flex items-center gap-2">
+                <span className="h-4 w-4 rounded-full" style={{ backgroundColor: space.color }} />
+                <Button
+                  aria-label={`Eliminar ${space.name}`}
+                  onClick={() => onDelete(space)}
+                  size="icon"
+                  title="Eliminar espacio"
+                  variant="ghost"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
             <div className="mt-5 grid grid-cols-2 gap-3">
               <div className="nexo-inset rounded-2xl p-3">
@@ -1364,6 +1638,7 @@ function SpacesView({
             </div>
           </Card>
         ))}
+        {!spaces.length ? <EmptyState icon={Sparkles} message="No hay espacios. Crea uno para agrupar tu trabajo." /> : null}
       </div>
     </div>
   );
@@ -1373,10 +1648,14 @@ function SavedView({
   items,
   spaces,
   addSavedItem,
+  onDelete,
+  onToggleFavorite,
 }: {
   items: SavedItem[];
   spaces: Space[];
   addSavedItem: (event: React.FormEvent<HTMLFormElement>) => void;
+  onDelete: (item: SavedItem) => void;
+  onToggleFavorite: (itemId: string) => void;
 }) {
   return (
     <div className="grid gap-6 xl:grid-cols-[360px_1fr]">
@@ -1409,7 +1688,26 @@ function SavedView({
                 <span className="rounded-full bg-[var(--primary-soft)] px-3 py-1 text-xs font-bold text-[var(--primary-strong)]">
                   {item.type}
                 </span>
-                <Star className="h-4 w-4 text-[var(--primary)]" fill={item.isFavorite ? "currentColor" : "none"} />
+                <div className="flex items-center gap-1">
+                  <Button
+                    aria-label={item.isFavorite ? `Quitar ${item.title} de favoritos` : `Marcar ${item.title} como favorito`}
+                    onClick={() => onToggleFavorite(item.id)}
+                    size="icon"
+                    title={item.isFavorite ? "Quitar de favoritos" : "Marcar como favorito"}
+                    variant="ghost"
+                  >
+                    <Star className="h-4 w-4" fill={item.isFavorite ? "currentColor" : "none"} />
+                  </Button>
+                  <Button
+                    aria-label={`Eliminar ${item.title}`}
+                    onClick={() => onDelete(item)}
+                    size="icon"
+                    title="Eliminar enlace"
+                    variant="ghost"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
               <h2 className="mt-4 font-display text-lg font-bold">{item.title}</h2>
               <p className="mt-2 text-sm text-[var(--muted)]">{item.description || item.url}</p>
@@ -1420,6 +1718,7 @@ function SavedView({
             </Card>
           );
         })}
+        {!items.length ? <EmptyState icon={Bookmark} message="No hay enlaces guardados." /> : null}
       </div>
     </div>
   );
@@ -1432,6 +1731,7 @@ function ListsView({
   setData,
   addList,
   addListItem,
+  onDeleteList,
 }: {
   lists: NexoData["lists"];
   items: NexoData["listItems"];
@@ -1439,6 +1739,7 @@ function ListsView({
   setData: React.Dispatch<React.SetStateAction<NexoData>>;
   addList: (event: React.FormEvent<HTMLFormElement>) => void;
   addListItem: (event: React.FormEvent<HTMLFormElement>, listId: string) => void;
+  onDeleteList: (list: NexoList) => void;
 }) {
   return (
     <div className="space-y-6">
@@ -1455,35 +1756,64 @@ function ListsView({
       <div className="grid gap-4 xl:grid-cols-3">
         {lists.map((list) => (
           <Card className="p-5" key={list.id}>
-            <CardTitle>{list.name}</CardTitle>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle>{list.name}</CardTitle>
+              <Button
+                aria-label={`Eliminar ${list.name}`}
+                onClick={() => onDeleteList(list)}
+                size="icon"
+                title="Eliminar lista"
+                variant="ghost"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
             <div className="mt-4 space-y-2">
               {items
                 .filter((item) => item.listId === list.id)
                 .sort((first, second) => first.position - second.position)
                 .map((item) => (
-                  <button
-                    className="flex w-full items-center gap-3 rounded-2xl p-2 text-left hover:bg-[var(--surface-container-low)]"
-                    key={item.id}
-                    onClick={() =>
-                      setData((current) => ({
-                        ...current,
-                        listItems: current.listItems.map((listItem) =>
-                          listItem.id === item.id ? { ...listItem, completed: !listItem.completed } : listItem,
-                        ),
-                      }))
-                    }
-                    type="button"
-                  >
-                    {item.completed ? (
-                      <CheckCircle2 className="h-5 w-5 text-[var(--primary)]" />
-                    ) : (
-                      <Circle className="h-5 w-5 text-[var(--muted)]" />
-                    )}
-                    <span className={item.completed ? "text-sm line-through text-[var(--muted-soft)]" : "text-sm font-medium"}>
-                      {item.text}
-                    </span>
-                  </button>
+                  <div className="flex items-center gap-1 rounded-2xl hover:bg-[var(--surface-container-low)]" key={item.id}>
+                    <button
+                      className="flex min-w-0 flex-1 items-center gap-3 p-2 text-left"
+                      onClick={() =>
+                        setData((current) => ({
+                          ...current,
+                          listItems: current.listItems.map((listItem) =>
+                            listItem.id === item.id ? { ...listItem, completed: !listItem.completed } : listItem,
+                          ),
+                        }))
+                      }
+                      type="button"
+                    >
+                      {item.completed ? (
+                        <CheckCircle2 className="h-5 w-5 shrink-0 text-[var(--primary)]" />
+                      ) : (
+                        <Circle className="h-5 w-5 shrink-0 text-[var(--muted)]" />
+                      )}
+                      <span className={item.completed ? "truncate text-sm line-through text-[var(--muted-soft)]" : "truncate text-sm font-medium"}>
+                        {item.text}
+                      </span>
+                    </button>
+                    <Button
+                      aria-label={`Eliminar ${item.text}`}
+                      onClick={() =>
+                        setData((current) => ({
+                          ...current,
+                          listItems: current.listItems.filter((listItem) => listItem.id !== item.id),
+                        }))
+                      }
+                      size="icon"
+                      title="Eliminar elemento"
+                      variant="ghost"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 ))}
+              {!items.some((item) => item.listId === list.id) ? (
+                <p className="py-4 text-center text-sm text-[var(--muted)]">La lista está vacía.</p>
+              ) : null}
             </div>
             <form className="mt-4 flex gap-2" onSubmit={(event) => addListItem(event, list.id)}>
               <Input name="text" placeholder="Añadir item" required />
@@ -1493,6 +1823,7 @@ function ListsView({
             </form>
           </Card>
         ))}
+        {!lists.length ? <EmptyState icon={ListChecks} message="No hay listas. Crea una para empezar." /> : null}
       </div>
     </div>
   );
@@ -1595,7 +1926,7 @@ function SettingsView({
           <CardHeader>
             <div>
               <CardTitle>Apariencia</CardTitle>
-              <CardDescription>Preferencias visuales sincronizadas con Supabase.</CardDescription>
+              <CardDescription>Preferencias visuales guardadas en tu cuenta.</CardDescription>
             </div>
           </CardHeader>
           <div className="mt-5 space-y-5">
@@ -1604,9 +1935,10 @@ function SettingsView({
               <div className="grid grid-cols-3 gap-2">
                 {(["light", "dark", "system"] as const).map((theme) => (
                   <Button
+                    aria-pressed={settings.theme === theme}
                     key={theme}
                     onClick={() => updateTheme(theme)}
-                    variant={settings.theme === theme ? "inset" : "secondary"}
+                    variant={settings.theme === theme ? "primary" : "secondary"}
                   >
                     {theme === "light" ? <Sun className="h-4 w-4" /> : theme === "dark" ? <Moon className="h-4 w-4" /> : null}
                     {theme === "light" ? "Claro" : theme === "dark" ? "Oscuro" : "Sistema"}
@@ -1616,19 +1948,28 @@ function SettingsView({
             </div>
             <div>
               <p className="mb-2 text-sm font-bold">Color de acento</p>
-              <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
-                {accentOptions.map((option) => (
+              <div className="grid grid-cols-4 gap-3 sm:grid-cols-7">
+                {accentPalette.map((option) => (
                   <button
-                    className={
-                      accent === option
-                        ? "nexo-inset rounded-2xl p-2 text-xs font-bold text-[var(--primary)]"
-                        : "nexo-surface-sm rounded-2xl p-2 text-xs font-semibold text-[var(--muted)]"
-                    }
-                    key={option}
-                    onClick={() => updateAccent(option)}
+                    aria-label={`Usar color ${option.label}`}
+                    aria-pressed={accent === option.key}
+                    className="group flex min-w-0 flex-col items-center gap-2 text-xs font-semibold text-[var(--muted)]"
+                    key={option.key}
+                    onClick={() => updateAccent(option.key)}
+                    title={option.label}
                     type="button"
                   >
-                    {option}
+                    <span
+                      className={
+                        accent === option.key
+                          ? "flex h-11 w-11 items-center justify-center rounded-xl border-2 border-[var(--foreground)] shadow-[0_0_0_3px_var(--surface),0_0_0_5px_var(--primary)]"
+                          : "flex h-11 w-11 items-center justify-center rounded-xl border-2 border-white/60 shadow-sm transition-transform group-hover:scale-105"
+                      }
+                      style={{ backgroundColor: option.color }}
+                    >
+                      {accent === option.key ? <Check aria-hidden className="h-5 w-5 text-white drop-shadow-sm" strokeWidth={3} /> : null}
+                    </span>
+                    <span className="truncate">{option.label}</span>
                   </button>
                 ))}
               </div>
@@ -1651,12 +1992,26 @@ function SettingsView({
                 const enabled = settings.enabledModules.includes(module.key);
 
                 return (
-                  <div className="nexo-surface-sm flex items-center justify-between rounded-2xl p-3" key={module.key}>
+                  <div
+                    className={
+                      enabled
+                        ? "flex items-center justify-between rounded-2xl border border-[color-mix(in_srgb,var(--primary)_45%,transparent)] bg-[var(--primary-soft)] p-3"
+                        : "nexo-surface-sm flex items-center justify-between rounded-2xl border border-transparent p-3"
+                    }
+                    key={module.key}
+                  >
                     <div className="flex items-center gap-3">
                       <Icon className="h-5 w-5 text-[var(--primary)]" />
-                      <span className="text-sm font-bold">{module.label}</span>
+                      <div>
+                        <span className="block text-sm font-bold">{module.label}</span>
+                        <span className="block text-xs text-[var(--muted)]">{enabled ? "Activo" : "Inactivo"}</span>
+                      </div>
                     </div>
-                    <Switch checked={enabled} onClick={() => toggleModule(module.key)} />
+                    <Switch
+                      aria-label={`${enabled ? "Desactivar" : "Activar"} ${module.label}`}
+                      checked={enabled}
+                      onClick={() => toggleModule(module.key)}
+                    />
                   </div>
                 );
               })}
@@ -1668,11 +2023,23 @@ function SettingsView({
         <CardHeader>
           <div>
             <CardTitle>Datos del workspace</CardTitle>
-            <CardDescription>Esto restablece los datos de ejemplo y sincroniza el cambio con Supabase.</CardDescription>
+            <CardDescription>Esto reemplaza tu workspace con los datos iniciales de ejemplo.</CardDescription>
           </div>
-          <Button onClick={onReset}>Restablecer datos</Button>
+          <Button onClick={onReset}>
+            <RotateCcw aria-hidden className="h-4 w-4" />
+            Restablecer datos
+          </Button>
         </CardHeader>
       </Card>
+    </div>
+  );
+}
+
+function EmptyState({ icon: Icon, message }: { icon: typeof Home; message: string }) {
+  return (
+    <div className="nexo-inset col-span-full flex min-h-36 flex-col items-center justify-center rounded-2xl p-6 text-center">
+      <Icon aria-hidden className="h-7 w-7 text-[var(--primary)]" />
+      <p className="mt-3 max-w-sm text-sm text-[var(--muted)]">{message}</p>
     </div>
   );
 }

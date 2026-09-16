@@ -610,3 +610,12 @@ export async function createDriveFileSignedUrl(storagePath: string) {
 
   return data.signedUrl;
 }
+
+export async function deleteDriveFileFromSupabase(storagePath: string) {
+  const supabase = createNexoSupabaseClient();
+  const { error } = await supabase.storage.from("nexo-files").remove([storagePath]);
+
+  if (error) {
+    throw error;
+  }
+}

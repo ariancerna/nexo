@@ -60,7 +60,7 @@ export const recentNotes = [
   {
     title: "Arquitectura del Proyecto Nexo",
     space: "Programación",
-    excerpt: "Estructura de componentes modulares, estado compartido y preparación para Supabase.",
+    excerpt: "Estructura de componentes modulares, estado compartido y sincronización segura.",
     editedAt: "Editado hace 2h",
   },
   {
