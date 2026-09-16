@@ -8,14 +8,14 @@ import {
   createNexoSupabaseClient,
   deleteDriveFileFromSupabase,
   getSupabaseUserId,
+  loadNexoDataFromSupabase,
   normalizeNexoDataForSupabase,
   saveNexoDataToSupabase,
-  seedSupabaseIfEmpty,
   uploadDriveFileToSupabase,
 } from "@/lib/nexo/supabase-data";
 import type { DriveFile, NexoData } from "@/types/nexo";
 
-const storageKey = "nexo-workspace-v1";
+const storageKey = "nexo-workspace-v2";
 
 export type NexoSyncStatus = "local" | "loading" | "syncing" | "synced" | "error";
 
@@ -86,7 +86,7 @@ export function useNexoData() {
           return;
         }
 
-        const remoteData = await seedSupabaseIfEmpty(nextUserId, localData);
+        const remoteData = await loadNexoDataFromSupabase(supabase);
         const snapshot = JSON.stringify(remoteData);
 
         if (!cancelled) {

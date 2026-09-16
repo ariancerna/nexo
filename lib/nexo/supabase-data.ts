@@ -208,21 +208,6 @@ export function normalizeNexoDataForSupabase(input: NexoData): NexoData {
   return data;
 }
 
-function hasWorkspaceRows(data: NexoData) {
-  return (
-    data.spaces.length +
-      data.notes.length +
-      data.tasks.length +
-      data.events.length +
-      data.savedItems.length +
-      data.lists.length +
-      data.listItems.length +
-      data.driveFiles.length +
-      data.focusSessions.length >
-    0
-  );
-}
-
 function safeSavedItemType(value: string): SavedItemType {
   const valid: SavedItemType[] = ["article", "video", "repository", "document", "link", "other"];
   return valid.includes(value as SavedItemType) ? (value as SavedItemType) : "link";
@@ -575,16 +560,6 @@ export async function saveNexoDataToSupabase(userId: string, input: NexoData) {
   await deleteMissing(supabase, "spaces", data.spaces.map((space) => space.id));
 
   return data;
-}
-
-export async function seedSupabaseIfEmpty(userId: string, localData: NexoData) {
-  const remoteData = await loadNexoDataFromSupabase(createNexoSupabaseClient());
-
-  if (hasWorkspaceRows(remoteData)) {
-    return remoteData;
-  }
-
-  return saveNexoDataToSupabase(userId, localData);
 }
 
 export async function uploadDriveFileToSupabase(userId: string, file: File) {

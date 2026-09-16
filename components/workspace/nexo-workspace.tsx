@@ -1117,10 +1117,10 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
               modules={modules}
               onReset={() => {
                 setDialog({
-                  title: "Restablecer workspace",
-                  description: "Tus datos actuales serán reemplazados por los ejemplos iniciales de Nexo.",
+                  title: "Vaciar workspace",
+                  description: "Se eliminarán tus notas, tareas, archivos, eventos, listas, sesiones y espacios.",
                   variant: "danger",
-                  confirmLabel: "Restablecer",
+                  confirmLabel: "Vaciar workspace",
                   onConfirm: resetData,
                 });
               }}
@@ -2381,11 +2381,11 @@ function SettingsView({
         <CardHeader>
           <div>
             <CardTitle>Datos del workspace</CardTitle>
-            <CardDescription>Esto reemplaza tu workspace con los datos iniciales de ejemplo.</CardDescription>
+            <CardDescription>Elimina todo el contenido del workspace y conserva tu cuenta y preferencias.</CardDescription>
           </div>
           <Button onClick={onReset}>
             <RotateCcw aria-hidden className="h-4 w-4" />
-            Restablecer datos
+            Vaciar workspace
           </Button>
         </CardHeader>
       </Card>

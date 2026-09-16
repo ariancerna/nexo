@@ -95,13 +95,14 @@ function LandingPage() {
       >
         <Image
           alt=""
-          className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-[0.035]"
+          className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-40"
           data-testid="landing-hero-image"
           fill
           priority
           sizes="100vw"
-          src="/images/nexo-hero.png"
+          src="/images/nexo-hero-light.png"
         />
+        <div aria-hidden className="pointer-events-none absolute inset-0 bg-white/64" />
         <div className="relative mx-auto max-w-7xl" data-testid="landing-hero-content">
           <div className="mx-auto max-w-3xl text-center">
             <div className="inline-flex items-center gap-2 rounded-full border border-[#dedff0] bg-white px-3 py-1.5 text-[0.68rem] font-bold text-[#55576a] shadow-sm">

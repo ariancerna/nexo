@@ -107,6 +107,17 @@ test("manifest exposes installable PNG icons", async ({ request }) => {
   );
 });
 
+test("uses the transparent Nexo mark as the browser icon", async ({ page }) => {
+  await page.goto("/", { waitUntil: "networkidle" });
+
+  const icons = await page.locator('link[rel~="icon"]').evaluateAll((nodes) =>
+    nodes.map((node) => node.getAttribute("href")),
+  );
+
+  expect(icons).toContain("/icons/nexo-mark.svg");
+  expect(icons).not.toContain("/icons/nexo-icon.svg");
+});
+
 test("private workspace routes send guests to sign in", async ({ page }) => {
   await page.goto("/dashboard");
   await expect(page).toHaveURL(/\/login$/);

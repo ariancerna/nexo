@@ -31,7 +31,8 @@ export const metadata: Metadata = {
     title: "Nexo",
   },
   icons: {
-    icon: "/icons/nexo-icon.svg",
+    icon: [{ url: "/icons/nexo-mark.svg", type: "image/svg+xml" }],
+    shortcut: "/icons/nexo-mark.svg",
     apple: "/icons/nexo-icon-192.png",
   },
   manifest: "/manifest.webmanifest",
