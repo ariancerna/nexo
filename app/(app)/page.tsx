@@ -19,10 +19,6 @@ import {
   WifiOff,
 } from "lucide-react";
 
-import { AppShell } from "@/components/layout/app-shell";
-import { getOptionalSupabasePublicEnv } from "@/lib/supabase/env";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-
 const features = [
   {
     icon: FileText,
@@ -54,39 +50,7 @@ const features = [
   },
 ];
 
-export default async function HomePage() {
-  if (getOptionalSupabasePublicEnv()) {
-    const supabase = await createSupabaseServerClient();
-    const { data } = await supabase.auth.getClaims();
-
-    if (data?.claims?.sub) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("full_name, username, timezone, avatar_url, username_changed_at")
-        .eq("id", data.claims.sub)
-        .maybeSingle();
-      const email = typeof data.claims.email === "string" ? data.claims.email : "";
-      const avatarResult = profile?.avatar_url
-        ? await supabase.storage.from("nexo-avatars").createSignedUrl(profile.avatar_url, 60 * 60 * 24)
-        : null;
-
-      return (
-        <AppShell
-          user={{
-            id: data.claims.sub,
-            email,
-            name: profile?.full_name || email.split("@")[0] || "Usuario Nexo",
-            username: profile?.username ?? null,
-            timezone: profile?.timezone || "America/Lima",
-            avatarPath: profile?.avatar_url ?? null,
-            avatarUrl: avatarResult?.data?.signedUrl ?? null,
-            usernameChangedAt: profile?.username_changed_at ?? null,
-          }}
-        />
-      );
-    }
-  }
-
+export default function HomePage() {
   return <LandingPage />;
 }
 
@@ -243,7 +207,7 @@ function ProductPreview() {
     <div className="mx-auto mt-14 max-w-5xl rounded-lg border border-[#dfe2ec] bg-[#eef0f7] p-3 shadow-[0_24px_55px_rgba(76,81,112,0.18)] sm:p-5">
       <div className="overflow-hidden rounded-lg border border-[#e1e3ec] bg-white">
         <div className="flex h-9 items-center justify-between border-b border-[#e8e9f0] px-4 text-[0.62rem] text-[#858797]">
-          <span>nexo.app/inicio</span><span className="flex items-center gap-1.5 font-bold text-[#168768]"><span className="h-1.5 w-1.5 rounded-full bg-[#22c58b]" />Espacio personal activo</span>
+          <span>nexo.app/dashboard</span><span className="flex items-center gap-1.5 font-bold text-[#168768]"><span className="h-1.5 w-1.5 rounded-full bg-[#22c58b]" />Espacio personal activo</span>
         </div>
         <div className="grid min-h-[310px] grid-cols-1 sm:grid-cols-[180px_1fr]">
           <aside className="hidden border-r border-[#e8e9f0] bg-[#f8f9fc] p-4 sm:block">

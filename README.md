@@ -22,6 +22,9 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+- `/` is the public product page.
+- `/dashboard` is the authenticated personal workspace.
+
 ## Environment
 
 Create `.env.local` from `.env.example`:
@@ -33,6 +36,8 @@ NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ```
 
 Google and Microsoft OAuth credentials belong in the provider configuration of the authentication dashboard, never in a public browser environment variable.
+
+To let users reject and undo an automatically linked Google identity, enable **Authentication > Sign In / Providers > Allow manual linking** in Supabase. Supabase requires this setting for `unlinkIdentity()`.
 
 ## Security Model
 
@@ -57,7 +62,7 @@ npm run test:e2e
 
 ## Current Functionality
 
-- Password, Google, and Microsoft-ready authentication flows with onboarding and password recovery.
+- Password, Google, and Microsoft-ready authentication flows with onboarding, password recovery, and existing-account linking consent.
 - Cloud-synced CRUD for notes, tasks, spaces, events, saved links, lists, and private files.
 - Focus timer with pause, resume, reset, and completed-session history.
 - Global search across workspace data.

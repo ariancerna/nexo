@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { authRoutes } from "@/lib/auth/routes";
+import { dashboardRoute } from "@/lib/auth/account-linking";
 import { getOptionalSupabasePublicEnv } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -38,6 +39,6 @@ export async function redirectAuthenticatedUser() {
   const user = await getCurrentUser();
 
   if (user) {
-    redirect("/");
+    redirect(dashboardRoute);
   }
 }

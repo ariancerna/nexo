@@ -1,14 +1,21 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { authRoutes } from "@/lib/auth/routes";
+import {
+  accountLinkRoute,
+  dashboardRoute,
+  getConfirmedOAuthProviders,
+  safeInternalPath,
+  userHasLinkedProvider,
+} from "@/lib/auth/account-linking";
 import { getOptionalSupabasePublicEnv } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
-  const requestedNext = requestUrl.searchParams.get("next") ?? "/";
-  let next = requestedNext.startsWith("/") && !requestedNext.startsWith("//") ? requestedNext : "/";
+  const provider = requestUrl.searchParams.get("provider");
+  let next = safeInternalPath(requestUrl.searchParams.get("next"));
 
   if (!getOptionalSupabasePublicEnv()) {
     return NextResponse.redirect(
@@ -32,7 +39,25 @@ export async function GET(request: NextRequest) {
             .maybeSingle();
 
           if (profile?.onboarding_completed) {
-            next = "/";
+            next = dashboardRoute;
+          }
+        }
+      }
+
+      if (provider === "google") {
+        const { data: userData } = await supabase.auth.getUser();
+
+        if (userData.user && userHasLinkedProvider(userData.user, "google")) {
+          const { data: settings } = await supabase
+            .from("user_settings")
+            .select("preferences")
+            .eq("user_id", userData.user.id)
+            .maybeSingle();
+
+          if (!getConfirmedOAuthProviders(settings?.preferences).includes("google")) {
+            return NextResponse.redirect(
+              new URL(`${accountLinkRoute}?next=${encodeURIComponent(next)}`, requestUrl),
+            );
           }
         }
       }

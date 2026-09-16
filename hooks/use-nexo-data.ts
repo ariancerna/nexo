@@ -227,7 +227,17 @@ export function useNexoData() {
           setSyncMessage(error instanceof Error ? error.message : "No se pudo eliminar el archivo");
         }
       },
-      resetData: () => setData(normalizeNexoDataForSupabase(defaultNexoData)),
+      resetData: () =>
+        setData((current) => {
+          const reset = normalizeNexoDataForSupabase(defaultNexoData);
+          return {
+            ...reset,
+            settings: {
+              ...reset.settings,
+              confirmedOAuthProviders: current.settings.confirmedOAuthProviders,
+            },
+          };
+        }),
     }),
     [uploadDriveFiles],
   );

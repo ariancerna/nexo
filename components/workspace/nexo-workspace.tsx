@@ -28,6 +28,7 @@ import {
   Home,
   Landmark,
   Leaf,
+  LayoutGrid,
   ListChecks,
   Lightbulb,
   LogOut,
@@ -55,6 +56,7 @@ import {
   Utensils,
   UsersRound,
   WalletCards,
+  X,
 } from "lucide-react";
 
 import { signOut } from "@/app/auth/actions";
@@ -102,7 +104,7 @@ const modules: Array<{ key: ModuleKey; label: string; icon: typeof Home }> = [
   { key: "settings", label: "Ajustes", icon: Settings },
 ];
 
-const mobileModules: ModuleKey[] = ["dashboard", "notes", "spaces", "tasks", "settings"];
+const mobileModules: ModuleKey[] = ["dashboard", "notes", "tasks", "spaces"];
 const taskStatuses: TaskStatus[] = ["todo", "in_progress", "completed"];
 const priorities: Priority[] = ["low", "medium", "high"];
 const savedTypes: SavedItemType[] = ["article", "video", "repository", "document", "link", "other"];
@@ -232,6 +234,7 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
   const [profileUser, setProfileUser] = useState(user);
   const [query, setQuery] = useState("");
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [mobileModulesOpen, setMobileModulesOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [dialog, setDialog] = useState<FeedbackDialogState | null>(null);
   const [online, setOnline] = useState(true);
@@ -561,21 +564,34 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
   };
 
   const deleteSpace = (space: Space) => {
-    requestRemoval(`el espacio “${space.name}”`, () => {
-      if (activeSpaceId === space.id) setActiveSpaceId(null);
-      setData((current) => ({
-        ...current,
-        spaces: current.spaces.filter((item) => item.id !== space.id),
-        notes: current.notes.map((item) => (item.spaceId === space.id ? { ...item, spaceId: null } : item)),
-        tasks: current.tasks.map((item) => (item.spaceId === space.id ? { ...item, spaceId: null } : item)),
-        events: current.events.map((item) => (item.spaceId === space.id ? { ...item, spaceId: null } : item)),
-        savedItems: current.savedItems.map((item) => (item.spaceId === space.id ? { ...item, spaceId: null } : item)),
-        lists: current.lists.map((item) => (item.spaceId === space.id ? { ...item, spaceId: null } : item)),
-        driveFiles: current.driveFiles.map((item) => (item.spaceId === space.id ? { ...item, spaceId: null } : item)),
-        focusSessions: current.focusSessions.map((item) =>
-          item.spaceId === space.id ? { ...item, spaceId: null } : item,
-        ),
-      }));
+    const linkedItems = countSpaceItems(data, space.id);
+    setDialog({
+      title: "Eliminar espacio",
+      description: linkedItems
+        ? `Eliminarás “${space.name}”. Sus ${linkedItems} elementos se conservarán en Nexo, pero quedarán sin espacio asignado.`
+        : `Eliminarás “${space.name}”. Esta acción no se puede deshacer.`,
+      variant: "danger",
+      confirmLabel: "Eliminar espacio",
+      onConfirm: () => {
+        if (activeSpaceId === space.id) setActiveSpaceId(null);
+        setData((current) => ({
+          ...current,
+          spaces: current.spaces.filter((item) => item.id !== space.id),
+          notes: current.notes.map((item) => (item.spaceId === space.id ? { ...item, spaceId: null } : item)),
+          tasks: current.tasks.map((item) => (item.spaceId === space.id ? { ...item, spaceId: null } : item)),
+          events: current.events.map((item) => (item.spaceId === space.id ? { ...item, spaceId: null } : item)),
+          savedItems: current.savedItems.map((item) =>
+            item.spaceId === space.id ? { ...item, spaceId: null } : item,
+          ),
+          lists: current.lists.map((item) => (item.spaceId === space.id ? { ...item, spaceId: null } : item)),
+          driveFiles: current.driveFiles.map((item) =>
+            item.spaceId === space.id ? { ...item, spaceId: null } : item,
+          ),
+          focusSessions: current.focusSessions.map((item) =>
+            item.spaceId === space.id ? { ...item, spaceId: null } : item,
+          ),
+        }));
+      },
     });
   };
 
@@ -947,18 +963,20 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
           </div>
         </div>
 
-        <select
-          aria-label="Cambiar módulo"
-          className="nexo-inset mt-3 h-10 w-full rounded-xl px-3 text-sm font-semibold outline-none lg:hidden"
-          onChange={(event) => setActiveModule(event.target.value as ModuleKey)}
-          value={activeModule}
+        <button
+          aria-expanded={mobileModulesOpen}
+          className="nexo-inset mt-3 flex h-11 w-full items-center justify-between rounded-xl px-3 text-sm font-semibold lg:hidden"
+          onClick={() => setMobileModulesOpen(true)}
+          type="button"
         >
-          {visibleModules.map((module) => (
-            <option key={module.key} value={module.key}>
-              {module.label}
-            </option>
-          ))}
-        </select>
+          <span className="flex items-center gap-2">
+            <LayoutGrid aria-hidden className="h-4 w-4 text-[var(--primary)]" />
+            Todos los módulos
+          </span>
+          <span className="rounded-lg bg-[var(--primary-soft)] px-2 py-1 text-xs text-[var(--primary-strong)]">
+            {visibleModules.length}
+          </span>
+        </button>
 
         {mobileSearchOpen ? (
           <label className="nexo-inset mt-3 flex items-center gap-2 rounded-2xl px-4 py-2 text-sm text-[var(--muted)] md:hidden">
@@ -1115,6 +1133,63 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
         </div>
       </main>
 
+      {mobileModulesOpen ? (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <button
+            aria-label="Cerrar módulos"
+            className="absolute inset-0 bg-black/30"
+            onClick={() => setMobileModulesOpen(false)}
+            type="button"
+          />
+          <section
+            aria-label="Todos los módulos"
+            aria-modal="true"
+            className="safe-bottom absolute inset-x-0 bottom-0 max-h-[78svh] overflow-y-auto rounded-t-3xl border-t border-[var(--border)] bg-[var(--surface-elevated)] p-4 shadow-[0_-18px_50px_var(--shadow-dark)]"
+            role="dialog"
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <p className="font-display text-lg font-bold">Todos los módulos</p>
+                <p className="text-xs text-[var(--muted)]">Abre cualquier área de tu espacio personal.</p>
+              </div>
+              <Button
+                aria-label="Cerrar módulos"
+                onClick={() => setMobileModulesOpen(false)}
+                size="icon"
+                variant="ghost"
+              >
+                <X aria-hidden className="h-5 w-5" />
+              </Button>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              {visibleModules.map((module) => {
+                const Icon = module.icon;
+                const active = activeModule === module.key;
+
+                return (
+                  <button
+                    className={
+                      active
+                        ? "flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl bg-[var(--primary)] p-3 text-center text-[var(--primary-foreground)]"
+                        : "nexo-surface-sm flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl p-3 text-center text-[var(--muted)]"
+                    }
+                    key={module.key}
+                    onClick={() => {
+                      setActiveModule(module.key);
+                      setMobileModulesOpen(false);
+                    }}
+                    type="button"
+                  >
+                    <Icon aria-hidden className="h-5 w-5" />
+                    <span className="text-xs font-bold">{module.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        </div>
+      ) : null}
+
       <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 mx-auto flex max-w-[520px] items-center justify-around rounded-t-3xl bg-[var(--surface)] px-2 pt-2 shadow-[0_-4px_20px_var(--shadow-dark-soft)] lg:hidden">
         {mobileModules
           .filter(
@@ -1146,6 +1221,18 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
             </button>
           );
           })}
+        <button
+          className={
+            mobileModules.includes(activeModule)
+              ? "flex flex-col items-center justify-center px-3 py-1 text-[var(--muted)]"
+              : "flex flex-col items-center justify-center rounded-2xl bg-[var(--primary)] px-3 py-1 text-[var(--primary-foreground)]"
+          }
+          onClick={() => setMobileModulesOpen(true)}
+          type="button"
+        >
+          <LayoutGrid aria-hidden className="h-5 w-5" />
+          <span className="mt-0.5 text-[0.68rem] font-bold">Módulos</span>
+        </button>
       </nav>
       <FeedbackDialog dialog={dialog} onClose={closeDialog} />
     </div>
@@ -1874,12 +1961,14 @@ function SpacesView({
                 <span className="h-4 w-4 rounded-full" style={{ backgroundColor: space.color }} />
                 <Button
                   aria-label={`Eliminar ${space.name}`}
+                  className="text-[var(--danger)]"
                   onClick={() => onDelete(space)}
-                  size="icon"
+                  size="sm"
                   title="Eliminar espacio"
                   variant="ghost"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 aria-hidden className="h-4 w-4" />
+                  Eliminar
                 </Button>
               </div>
             </div>

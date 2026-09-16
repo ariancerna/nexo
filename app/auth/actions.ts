@@ -4,11 +4,20 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { authRoutes } from "@/lib/auth/routes";
+import {
+  dashboardRoute,
+  safeInternalPath,
+  withConfirmedOAuthProvider,
+} from "@/lib/auth/account-linking";
 import { getOptionalSupabasePublicEnv } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 function authRedirect(path: string, message: string): never {
   redirect(`${path}?message=${encodeURIComponent(message)}`);
+}
+
+function accountLinkRedirect(message: string, next: string): never {
+  redirect(`${authRoutes.linkAccount}?message=${encodeURIComponent(message)}&next=${encodeURIComponent(next)}`);
 }
 
 function requireBackend() {
@@ -52,7 +61,7 @@ export async function signInWithPassword(formData: FormData) {
     authRedirect(authRoutes.login, "No pudimos iniciar sesión. Revisa tus datos e inténtalo nuevamente.");
   }
 
-  redirect("/");
+  redirect(dashboardRoute);
 }
 
 export async function signUpWithPassword(formData: FormData) {
@@ -107,7 +116,7 @@ async function signInWithProvider(provider: "google" | "azure", label: "Google" 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider,
     options: {
-      redirectTo: `${siteUrl}/auth/callback?next=/onboarding`,
+      redirectTo: `${siteUrl}/auth/callback?next=/onboarding&provider=${provider}`,
       scopes: provider === "azure" ? "email" : undefined,
     },
   });
@@ -188,6 +197,62 @@ export async function signOut() {
   const supabase = await createSupabaseServerClient();
   await supabase.auth.signOut();
   redirect(authRoutes.login);
+}
+
+export async function confirmGoogleAccountLink(formData: FormData) {
+  requireBackend();
+
+  const next = safeInternalPath(formData.get("next"));
+  const supabase = await createSupabaseServerClient();
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+
+  if (userError || !userData.user) {
+    redirect(authRoutes.login);
+  }
+
+  const { data: settings } = await supabase
+    .from("user_settings")
+    .select("preferences")
+    .eq("user_id", userData.user.id)
+    .maybeSingle();
+  const { error } = await supabase.from("user_settings").upsert(
+    {
+      user_id: userData.user.id,
+      preferences: withConfirmedOAuthProvider(settings?.preferences, "google"),
+    },
+    { onConflict: "user_id" },
+  );
+
+  if (error) {
+    accountLinkRedirect("No pudimos guardar tu elección. Inténtalo nuevamente.", next);
+  }
+
+  redirect(next);
+}
+
+export async function cancelGoogleAccountLink(formData: FormData) {
+  requireBackend();
+
+  const next = safeInternalPath(formData.get("next"));
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.auth.getUserIdentities();
+  const googleIdentity = data?.identities.find((identity) => identity.provider === "google");
+
+  if (error || !googleIdentity) {
+    accountLinkRedirect("No encontramos una identidad de Google para desvincular.", next);
+  }
+
+  const { error: unlinkError } = await supabase.auth.unlinkIdentity(googleIdentity);
+
+  if (unlinkError) {
+    accountLinkRedirect(
+      "No pudimos desvincular Google en este momento. Google sigue vinculado; puedes conservar ese acceso o contactar a soporte.",
+      next,
+    );
+  }
+
+  await supabase.auth.signOut();
+  authRedirect(authRoutes.login, "Google no fue vinculado. Puedes entrar con tu correo y contraseña.");
 }
 
 export type ProfileUpdateResult =
@@ -366,5 +431,5 @@ export async function completeOnboarding(formData: FormData) {
     authRedirect(authRoutes.onboarding, "No pudimos guardar tu perfil. Inténtalo nuevamente.");
   }
 
-  redirect("/");
+  redirect(dashboardRoute);
 }

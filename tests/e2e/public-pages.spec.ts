@@ -35,7 +35,7 @@ test("landing hero fills the viewport and keeps its content over the image", asy
   await expect(image).toBeVisible();
   await expect(content).toBeVisible();
   await expect(page.getByRole("heading", { name: "Nexo para organizar tu vida digital con calma y estructura." })).toBeVisible();
-  await expect(page.getByText("nexo.app/inicio")).toBeVisible();
+  await expect(page.getByText("nexo.app/dashboard")).toBeVisible();
 
   const [heroBox, imageBox, contentBox] = await Promise.all([
     hero.boundingBox(),
@@ -98,12 +98,21 @@ test("manifest exposes installable PNG icons", async ({ request }) => {
   expect(response.ok()).toBeTruthy();
 
   const manifest = await response.json();
+  expect(manifest.start_url).toBe("/dashboard");
   expect(manifest.icons).toEqual(
     expect.arrayContaining([
       expect.objectContaining({ src: "/icons/nexo-icon-192.png", sizes: "192x192" }),
       expect.objectContaining({ src: "/icons/nexo-icon-512.png", sizes: "512x512" }),
     ]),
   );
+});
+
+test("private workspace routes send guests to sign in", async ({ page }) => {
+  await page.goto("/dashboard");
+  await expect(page).toHaveURL(/\/login$/);
+
+  await page.goto("/link-account");
+  await expect(page).toHaveURL(/\/login$/);
 });
 
 test("invalid password sign-in returns a friendly error", async ({ page }, testInfo) => {

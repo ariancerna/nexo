@@ -4,9 +4,11 @@ export const authRoutes = {
   forgotPassword: "/forgot-password",
   updatePassword: "/update-password",
   onboarding: "/onboarding",
+  linkAccount: "/link-account",
 } as const;
 
 export const protectedRoutePrefixes = [
+  "/dashboard",
   "/notes",
   "/drive",
   "/tasks",

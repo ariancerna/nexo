@@ -107,6 +107,7 @@ function normalizeSettings(value: Json | UserSettings | null | undefined): UserS
     interface_density?: UserSettings["interfaceDensity"];
     shadow_intensity?: UserSettings["shadowIntensity"];
     read_notification_ids?: string[];
+    confirmed_oauth_providers?: string[];
   };
 
   return {
@@ -122,6 +123,13 @@ function normalizeSettings(value: Json | UserSettings | null | undefined): UserS
           (item): item is string => typeof item === "string",
         )
       : [],
+    confirmedOAuthProviders: Array.isArray(
+      candidate.confirmedOAuthProviders ?? candidate.confirmed_oauth_providers,
+    )
+      ? (candidate.confirmedOAuthProviders ?? candidate.confirmed_oauth_providers ?? []).filter(
+          (item): item is string => typeof item === "string",
+        )
+      : [],
   };
 }
 
@@ -134,6 +142,7 @@ function settingsToPreferences(settings: UserSettings): Json {
     shadow_intensity: settings.shadowIntensity,
     enabled_modules: settings.enabledModules,
     read_notification_ids: settings.readNotificationIds.slice(-200),
+    confirmed_oauth_providers: settings.confirmedOAuthProviders,
   };
 }
 

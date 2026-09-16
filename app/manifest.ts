@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Nexo",
     short_name: "Nexo",
     description: "Hub digital personal para organizar tu vida desde una sola aplicación.",
-    start_url: "/",
+    start_url: "/dashboard",
     scope: "/",
     display: "standalone",
     background_color: "#f7f9fe",

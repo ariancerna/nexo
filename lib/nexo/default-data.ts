@@ -163,6 +163,7 @@ export const defaultNexoData: NexoData = {
       "settings",
     ],
     readNotificationIds: [],
+    confirmedOAuthProviders: [],
   },
 };
 

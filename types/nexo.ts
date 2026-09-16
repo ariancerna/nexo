@@ -115,6 +115,7 @@ export type UserSettings = {
   shadowIntensity: "soft" | "medium" | "deep";
   enabledModules: ModuleKey[];
   readNotificationIds: string[];
+  confirmedOAuthProviders: string[];
 };
 
 export type NexoData = {

@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { requireUser } from "@/lib/auth/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { dashboardRoute } from "@/lib/auth/account-linking";
 
 export default async function OnboardingPage({
   searchParams,
@@ -22,7 +23,7 @@ export default async function OnboardingPage({
       .maybeSingle();
 
     if (profile?.onboarding_completed) {
-      redirect("/");
+      redirect(dashboardRoute);
     }
   }
   const { message } = await searchParams;
