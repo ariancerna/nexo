@@ -4,6 +4,8 @@ out/
 dist/
 build/
 .vercel/
+test-results/
+playwright-report/
 
 .env
 .env*.local

@@ -15,9 +15,15 @@ export default function manifest(): MetadataRoute.Manifest {
     lang: "es",
     icons: [
       {
-        src: "/icons/nexo-icon.svg",
-        sizes: "any",
-        type: "image/svg+xml",
+        src: "/icons/nexo-icon-192.png",
+        sizes: "192x192",
+        type: "image/png",
+        purpose: "any",
+      },
+      {
+        src: "/icons/nexo-icon-512.png",
+        sizes: "512x512",
+        type: "image/png",
         purpose: "maskable",
       },
     ],

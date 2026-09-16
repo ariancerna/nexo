@@ -89,6 +89,13 @@ function normalizeModuleList(value: unknown): ModuleKey[] {
   return value.filter((item): item is ModuleKey => fallback.includes(item as ModuleKey));
 }
 
+function normalizeAccent(value: unknown): UserSettings["accentColor"] {
+  const validAccents: UserSettings["accentColor"][] = ["indigo", "blue", "green", "emerald", "orange", "red", "pink"];
+  return validAccents.includes(value as UserSettings["accentColor"])
+    ? (value as UserSettings["accentColor"])
+    : defaultNexoData.settings.accentColor;
+}
+
 function normalizeSettings(value: Json | UserSettings | null | undefined): UserSettings {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return defaultNexoData.settings;
@@ -104,7 +111,7 @@ function normalizeSettings(value: Json | UserSettings | null | undefined): UserS
   return {
     ...defaultNexoData.settings,
     ...candidate,
-    accentColor: candidate.accentColor ?? candidate.accent_color ?? defaultNexoData.settings.accentColor,
+    accentColor: normalizeAccent(candidate.accentColor ?? candidate.accent_color),
     enabledModules: normalizeModuleList(candidate.enabledModules ?? candidate.enabled_modules),
     interfaceDensity:
       candidate.interfaceDensity ?? candidate.interface_density ?? defaultNexoData.settings.interfaceDensity,
@@ -366,12 +373,15 @@ export async function loadNexoDataFromSupabase(supabase: NexoSupabaseClient): Pr
   return { spaces, notes, tasks, events, savedItems, lists, listItems, driveFiles, focusSessions, settings };
 }
 
-async function upsertRows<T>(table: keyof Database["public"]["Tables"], rows: T[]) {
+async function upsertRows<T>(
+  supabase: NexoSupabaseClient,
+  table: keyof Database["public"]["Tables"],
+  rows: T[],
+) {
   if (!rows.length) {
     return;
   }
 
-  const supabase = createNexoSupabaseClient();
   const { error } = await supabase.from(table).upsert(rows as never, { onConflict: "id" });
 
   if (error) {
@@ -379,8 +389,7 @@ async function upsertRows<T>(table: keyof Database["public"]["Tables"], rows: T[
   }
 }
 
-async function deleteMissing(table: SyncTable, ids: string[]) {
-  const supabase = createNexoSupabaseClient();
+async function deleteMissing(supabase: NexoSupabaseClient, table: SyncTable, ids: string[]) {
   const query = supabase.from(table).delete();
   const result = ids.length ? await query.not("id", "in", `(${ids.join(",")})`) : await query;
 
@@ -406,6 +415,7 @@ export async function saveNexoDataToSupabase(userId: string, input: NexoData) {
   }
 
   await upsertRows(
+    supabase,
     "spaces",
     data.spaces.map((space) => ({
       id: space.id,
@@ -419,6 +429,7 @@ export async function saveNexoDataToSupabase(userId: string, input: NexoData) {
     })),
   );
   await upsertRows(
+    supabase,
     "notes",
     data.notes.map((note) => ({
       id: note.id,
@@ -433,6 +444,7 @@ export async function saveNexoDataToSupabase(userId: string, input: NexoData) {
     })),
   );
   await upsertRows(
+    supabase,
     "tasks",
     data.tasks.map((task) => ({
       id: task.id,
@@ -448,6 +460,7 @@ export async function saveNexoDataToSupabase(userId: string, input: NexoData) {
     })),
   );
   await upsertRows(
+    supabase,
     "events",
     data.events.map((event) => ({
       id: event.id,
@@ -463,6 +476,7 @@ export async function saveNexoDataToSupabase(userId: string, input: NexoData) {
     })),
   );
   await upsertRows(
+    supabase,
     "saved_items",
     data.savedItems.map((item) => ({
       id: item.id,
@@ -478,6 +492,7 @@ export async function saveNexoDataToSupabase(userId: string, input: NexoData) {
     })),
   );
   await upsertRows(
+    supabase,
     "lists",
     data.lists.map((list) => ({
       id: list.id,
@@ -489,6 +504,7 @@ export async function saveNexoDataToSupabase(userId: string, input: NexoData) {
     })),
   );
   await upsertRows(
+    supabase,
     "list_items",
     data.listItems.map((item) => ({
       id: item.id,
@@ -502,6 +518,7 @@ export async function saveNexoDataToSupabase(userId: string, input: NexoData) {
     })),
   );
   await upsertRows(
+    supabase,
     "files",
     data.driveFiles.map((file) => ({
       id: file.id,
@@ -518,6 +535,7 @@ export async function saveNexoDataToSupabase(userId: string, input: NexoData) {
     })),
   );
   await upsertRows(
+    supabase,
     "focus_sessions",
     data.focusSessions.map((session) => ({
       id: session.id,
@@ -530,15 +548,15 @@ export async function saveNexoDataToSupabase(userId: string, input: NexoData) {
     })),
   );
 
-  await deleteMissing("focus_sessions", data.focusSessions.map((session) => session.id));
-  await deleteMissing("list_items", data.listItems.map((item) => item.id));
-  await deleteMissing("files", data.driveFiles.map((file) => file.id));
-  await deleteMissing("notes", data.notes.map((note) => note.id));
-  await deleteMissing("tasks", data.tasks.map((task) => task.id));
-  await deleteMissing("events", data.events.map((event) => event.id));
-  await deleteMissing("saved_items", data.savedItems.map((item) => item.id));
-  await deleteMissing("lists", data.lists.map((list) => list.id));
-  await deleteMissing("spaces", data.spaces.map((space) => space.id));
+  await deleteMissing(supabase, "focus_sessions", data.focusSessions.map((session) => session.id));
+  await deleteMissing(supabase, "list_items", data.listItems.map((item) => item.id));
+  await deleteMissing(supabase, "files", data.driveFiles.map((file) => file.id));
+  await deleteMissing(supabase, "notes", data.notes.map((note) => note.id));
+  await deleteMissing(supabase, "tasks", data.tasks.map((task) => task.id));
+  await deleteMissing(supabase, "events", data.events.map((event) => event.id));
+  await deleteMissing(supabase, "saved_items", data.savedItems.map((item) => item.id));
+  await deleteMissing(supabase, "lists", data.lists.map((list) => list.id));
+  await deleteMissing(supabase, "spaces", data.spaces.map((space) => space.id));
 
   return data;
 }
@@ -580,4 +598,15 @@ export async function uploadDriveFileToSupabase(userId: string, file: File) {
     isTrashed: false,
     createdAt,
   } satisfies DriveFile;
+}
+
+export async function createDriveFileSignedUrl(storagePath: string) {
+  const supabase = createNexoSupabaseClient();
+  const { data, error } = await supabase.storage.from("nexo-files").createSignedUrl(storagePath, 60);
+
+  if (error || !data.signedUrl) {
+    throw error ?? new Error("No se pudo abrir el archivo.");
+  }
+
+  return data.signedUrl;
 }

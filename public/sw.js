@@ -1,5 +1,5 @@
-const CACHE_NAME = "nexo-foundation-v1";
-const APP_SHELL = ["/", "/offline.html", "/icons/nexo-icon.svg"];
+const CACHE_NAME = "nexo-foundation-v2";
+const APP_SHELL = ["/offline.html", "/icons/nexo-icon-192.png", "/icons/nexo-icon-512.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -23,8 +23,9 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const { request } = event;
+  const url = new URL(request.url);
 
-  if (request.method !== "GET") {
+  if (request.method !== "GET" || url.origin !== self.location.origin) {
     return;
   }
 
@@ -33,21 +34,6 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  event.respondWith(
-    caches.match(request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-
-      return fetch(request).then((networkResponse) => {
-        const responseClone = networkResponse.clone();
-
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(request, responseClone);
-        });
-
-        return networkResponse;
-      });
-    }),
-  );
+  // Next.js assets are content-hashed and already cached efficiently by the browser.
+  // Avoid runtime caching here so development CSS and authenticated data never become stale.
 });

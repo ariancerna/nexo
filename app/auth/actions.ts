@@ -68,7 +68,7 @@ export async function signUpWithPassword(formData: FormData) {
   }
 
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
@@ -81,6 +81,10 @@ export async function signUpWithPassword(formData: FormData) {
 
   if (error) {
     authRedirect(authRoutes.register, "No pudimos crear la cuenta. Inténtalo nuevamente.");
+  }
+
+  if (data.session) {
+    redirect(authRoutes.onboarding);
   }
 
   authRedirect(authRoutes.login, "Cuenta creada. Revisa tu correo si Supabase requiere confirmación.");
@@ -128,7 +132,7 @@ export async function sendPasswordReset(formData: FormData) {
 
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${siteUrl}/login`,
+    redirectTo: `${siteUrl}/auth/callback?next=${authRoutes.updatePassword}`,
   });
 
   if (error) {
@@ -136,6 +140,31 @@ export async function sendPasswordReset(formData: FormData) {
   }
 
   authRedirect(authRoutes.login, "Te enviamos instrucciones para recuperar tu contraseña.");
+}
+
+export async function updatePassword(formData: FormData) {
+  requireBackend();
+
+  const password = String(formData.get("password") ?? "");
+  const passwordConfirmation = String(formData.get("passwordConfirmation") ?? "");
+
+  if (password.length < 8) {
+    authRedirect(authRoutes.updatePassword, "La contraseña debe tener al menos 8 caracteres.");
+  }
+
+  if (password !== passwordConfirmation) {
+    authRedirect(authRoutes.updatePassword, "Las contraseñas no coinciden.");
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.auth.updateUser({ password });
+
+  if (error) {
+    authRedirect(authRoutes.updatePassword, "El enlace venció o no pudimos actualizar la contraseña.");
+  }
+
+  await supabase.auth.signOut();
+  authRedirect(authRoutes.login, "Contraseña actualizada. Ya puedes iniciar sesión.");
 }
 
 export async function signOut() {

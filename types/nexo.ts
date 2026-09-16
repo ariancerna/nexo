@@ -108,7 +108,7 @@ export type FocusSession = {
 
 export type UserSettings = {
   theme: "light" | "dark" | "system";
-  accentColor: "indigo" | "blue" | "green" | "emerald" | "orange" | "red" | "pink" | "custom";
+  accentColor: "indigo" | "blue" | "green" | "emerald" | "orange" | "red" | "pink";
   interfaceDensity: "comfortable" | "compact";
   animations: boolean;
   shadowIntensity: "soft" | "medium" | "deep";

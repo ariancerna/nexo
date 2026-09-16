@@ -7,7 +7,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
-  const next = requestUrl.searchParams.get("next") ?? "/";
+  const requestedNext = requestUrl.searchParams.get("next") ?? "/";
+  const next = requestedNext.startsWith("/") && !requestedNext.startsWith("//") ? requestedNext : "/";
 
   if (!getOptionalSupabasePublicEnv()) {
     return NextResponse.redirect(new URL(`${authRoutes.login}?message=Supabase no está configurado.`, requestUrl));
@@ -15,8 +16,14 @@ export async function GET(request: NextRequest) {
 
   if (code) {
     const supabase = await createSupabaseServerClient();
-    await supabase.auth.exchangeCodeForSession(code);
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+
+    if (!error) {
+      return NextResponse.redirect(new URL(next, requestUrl));
+    }
   }
 
-  return NextResponse.redirect(new URL(next, requestUrl));
+  return NextResponse.redirect(
+    new URL(`${authRoutes.login}?message=${encodeURIComponent("El enlace de acceso no es válido o ya venció.")}`, requestUrl),
+  );
 }

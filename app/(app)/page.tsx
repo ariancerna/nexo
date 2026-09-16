@@ -37,7 +37,17 @@ export default async function HomePage() {
     const { data } = await supabase.auth.getClaims();
 
     if (data?.claims?.sub) {
-      return <AppShell />;
+      const { data: profile } = await supabase.from("profiles").select("full_name").maybeSingle();
+      const email = typeof data.claims.email === "string" ? data.claims.email : "";
+
+      return (
+        <AppShell
+          user={{
+            email,
+            name: profile?.full_name || email.split("@")[0] || "Usuario Nexo",
+          }}
+        />
+      );
     }
   }
 
@@ -47,10 +57,14 @@ export default async function HomePage() {
 function LandingPage() {
   return (
     <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
-      <section className="relative flex min-h-[92vh] items-center overflow-hidden px-5 py-6 sm:px-6 lg:px-8">
+      <section
+        className="relative flex min-h-[92vh] items-center overflow-hidden px-5 py-6 sm:px-6 lg:px-8"
+        data-testid="landing-hero"
+      >
         <Image
           alt="Workspace digital organizado en Nexo"
           className="absolute inset-0 h-full w-full object-cover"
+          data-testid="landing-hero-image"
           height={1080}
           priority
           src="/images/nexo-hero.png"
@@ -59,7 +73,7 @@ function LandingPage() {
         <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(11,15,25,0.96)_0%,rgba(11,15,25,0.82)_42%,rgba(11,15,25,0.42)_100%)]" />
         <div className="absolute inset-x-0 bottom-0 h-40 bg-[linear-gradient(180deg,transparent,var(--background))]" />
 
-        <div className="relative z-10 mx-auto flex w-full max-w-7xl flex-col">
+        <div className="relative z-10 mx-auto flex w-full max-w-7xl flex-col" data-testid="landing-hero-content">
           <header className="flex items-center justify-between py-2">
             <Link className="flex items-center gap-3" href="/">
               <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white shadow-[0_14px_30px_rgba(67,56,202,0.22)]">

@@ -2,16 +2,18 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTheme } from "next-themes";
+import Image from "next/image";
 import {
-  Bell,
   Bookmark,
   CalendarDays,
   CheckCircle2,
   Circle,
+  ExternalLink,
   FileText,
   FolderOpen,
   Home,
   ListChecks,
+  LogOut,
   Moon,
   Pause,
   Play,
@@ -27,6 +29,8 @@ import {
   Upload,
 } from "lucide-react";
 
+import { signOut } from "@/app/auth/actions";
+import type { WorkspaceUser } from "@/components/layout/app-shell";
 import { useAccent, type AccentColor, accentOptions } from "@/components/providers/accent-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -127,10 +131,11 @@ function countActiveModules(data: NexoData) {
   return data.settings.enabledModules.filter((module) => module !== "dashboard" && module !== "settings").length;
 }
 
-export function NexoWorkspace() {
-  const { data, ready, syncStatus, syncMessage, setData, resetData, uploadDriveFiles } = useNexoData();
+export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
+  const { data, ready, syncStatus, syncMessage, setData, resetData, uploadDriveFiles, openDriveFile } = useNexoData();
   const [activeModule, setActiveModule] = useState<ModuleKey>("dashboard");
   const [query, setQuery] = useState("");
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [online, setOnline] = useState(true);
   const [nowTick, setNowTick] = useState(Date.now());
   const [focus, setFocus] = useState<FocusState>({
@@ -532,8 +537,8 @@ export function NexoWorkspace() {
             onClick={() => setActiveModule("dashboard")}
             type="button"
           >
-            <div className="nexo-surface flex h-10 w-10 items-center justify-center rounded-2xl text-[var(--primary)]">
-              <span className="font-display text-lg font-black">N</span>
+            <div className="nexo-surface flex h-10 w-10 items-center justify-center rounded-2xl bg-white">
+              <Image alt="Nexo" height={24} src="/icons/nexo-mark.svg" width={24} />
             </div>
             <div>
               <p className="font-display text-2xl font-bold leading-none text-[var(--primary)]">Nexo</p>
@@ -594,38 +599,59 @@ export function NexoWorkspace() {
           </section>
         </div>
 
-        <ProfileFooter online={online} syncMessage={syncMessage} syncStatus={syncStatus} />
+        <ProfileFooter online={online} syncMessage={syncMessage} syncStatus={syncStatus} user={user} />
       </aside>
 
-      <header className="safe-top sticky top-0 z-30 flex items-center justify-between bg-[color-mix(in_srgb,var(--surface)_90%,transparent)] px-4 py-3 shadow-[0_4px_12px_var(--shadow-dark-soft)] backdrop-blur-md lg:ml-64 lg:px-8">
-        <div className="min-w-0">
-          <h1 className="truncate font-display text-xl font-bold lg:text-2xl">
-            {modules.find((module) => module.key === activeModule)?.label ?? "Nexo"}
-          </h1>
-          <p className="hidden text-sm text-[var(--muted)] sm:block">{online ? syncMessage : "Modo sin conexión"}</p>
+      <header className="safe-top sticky top-0 z-30 bg-[color-mix(in_srgb,var(--surface)_90%,transparent)] px-4 py-3 shadow-[0_4px_12px_var(--shadow-dark-soft)] backdrop-blur-md lg:ml-64 lg:px-8">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="truncate font-display text-xl font-bold lg:text-2xl">
+              {modules.find((module) => module.key === activeModule)?.label ?? "Nexo"}
+            </h1>
+            <p className="hidden text-sm text-[var(--muted)] sm:block">{online ? syncMessage : "Modo sin conexión"}</p>
+          </div>
+
+          <div className="flex items-center gap-2 lg:gap-3">
+            <label className="nexo-inset hidden w-80 items-center gap-2 rounded-2xl px-4 py-2 text-sm text-[var(--muted)] md:flex">
+              <Search aria-hidden className="h-4 w-4" />
+              <input
+                className="w-full bg-transparent outline-none placeholder:text-[var(--muted-soft)]"
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Buscar en Nexo..."
+                value={query}
+              />
+            </label>
+            <Button
+              aria-expanded={mobileSearchOpen}
+              aria-label={mobileSearchOpen ? "Cerrar búsqueda" : "Buscar"}
+              className="md:hidden"
+              onClick={() => {
+                setMobileSearchOpen((current) => !current);
+                if (mobileSearchOpen) setQuery("");
+              }}
+              size="icon"
+            >
+              <Search aria-hidden className="h-5 w-5" />
+            </Button>
+            <Button onClick={() => setActiveModule("notes")} variant="primary">
+              <Plus aria-hidden className="h-4 w-4" />
+              <span className="hidden sm:inline">Crear</span>
+            </Button>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 lg:gap-3">
-          <label className="nexo-inset hidden w-80 items-center gap-2 rounded-2xl px-4 py-2 text-sm text-[var(--muted)] md:flex">
+        {mobileSearchOpen ? (
+          <label className="nexo-inset mt-3 flex items-center gap-2 rounded-2xl px-4 py-2 text-sm text-[var(--muted)] md:hidden">
             <Search aria-hidden className="h-4 w-4" />
             <input
+              autoFocus
               className="w-full bg-transparent outline-none placeholder:text-[var(--muted-soft)]"
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Buscar en Nexo..."
               value={query}
             />
           </label>
-          <Button aria-label="Buscar" className="md:hidden" onClick={() => setQuery(query ? "" : " ")} size="icon">
-            <Search aria-hidden className="h-5 w-5" />
-          </Button>
-          <Button onClick={() => setActiveModule("notes")} variant="primary">
-            <Plus aria-hidden className="h-4 w-4" />
-            <span className="hidden sm:inline">Crear</span>
-          </Button>
-          <Button aria-label="Notificaciones" size="icon" variant="secondary">
-            <Bell aria-hidden className="h-5 w-5" />
-          </Button>
-        </div>
+        ) : null}
       </header>
 
       <main className="pb-28 lg:ml-64 lg:pb-8">
@@ -678,7 +704,7 @@ export function NexoWorkspace() {
             <TasksView addTask={addTask} onUpdateStatus={updateTaskStatus} spaces={data.spaces} tasks={data.tasks} />
           ) : null}
           {activeModule === "drive" ? (
-            <DriveView driveFiles={driveFiles} onUpload={addDriveFiles} />
+            <DriveView driveFiles={driveFiles} onOpen={openDriveFile} onUpload={addDriveFiles} />
           ) : null}
           {activeModule === "calendar" ? <CalendarView addEvent={addEvent} events={data.events} spaces={data.spaces} /> : null}
           {activeModule === "spaces" ? (
@@ -758,10 +784,12 @@ function ProfileFooter({
   online,
   syncMessage,
   syncStatus,
+  user,
 }: {
   online: boolean;
   syncMessage: string;
   syncStatus: NexoSyncStatus;
+  user: WorkspaceUser;
 }) {
   const statusLabel =
     syncStatus === "synced"
@@ -775,21 +803,36 @@ function ProfileFooter({
   return (
     <div className="space-y-3 border-t border-[var(--surface-container)] pt-4">
       <div className="nexo-surface flex items-center justify-between rounded-3xl p-3">
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--primary-soft)] text-sm font-bold text-[var(--primary-strong)]">
-            AC
+            {getInitials(user.name)}
           </div>
-          <div>
-            <p className="text-sm font-bold">Arian Cerna</p>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold">{user.name}</p>
+            <p className="truncate text-xs text-[var(--muted-soft)]">{user.email}</p>
             <p className="text-xs text-[var(--muted-soft)]">{online ? statusLabel : "Sin conexión"}</p>
           </div>
         </div>
+        <form action={signOut}>
+          <Button aria-label="Cerrar sesión" size="icon" title="Cerrar sesión" variant="ghost">
+            <LogOut aria-hidden className="h-4 w-4" />
+          </Button>
+        </form>
       </div>
       <div className="nexo-inset rounded-2xl px-3 py-2 text-xs font-bold text-[var(--primary)]">
         {online ? syncMessage : "Cambios guardados offline"}
       </div>
     </div>
   );
+}
+
+function getInitials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "NX";
 }
 
 function SearchPanel({
@@ -1160,9 +1203,11 @@ function TaskRow({ task }: { task: Task }) {
 
 function DriveView({
   driveFiles,
+  onOpen,
   onUpload,
 }: {
   driveFiles: DriveFile[];
+  onOpen: (file: DriveFile) => Promise<void>;
   onUpload: (files: FileList | null) => Promise<void>;
 }) {
   return (
@@ -1198,6 +1243,15 @@ function DriveView({
             <p className="mt-2 truncate text-xs text-[var(--muted-soft)]">
               {file.storagePath ? "Supabase Storage" : "Metadata local"}
             </p>
+            <Button
+              className="mt-4 w-full"
+              disabled={!file.storagePath}
+              onClick={() => void onOpen(file)}
+              size="sm"
+            >
+              <ExternalLink aria-hidden className="h-4 w-4" />
+              Abrir archivo
+            </Button>
           </Card>
         ))}
       </div>

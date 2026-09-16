@@ -2,6 +2,7 @@ export const authRoutes = {
   login: "/login",
   register: "/register",
   forgotPassword: "/forgot-password",
+  updatePassword: "/update-password",
   onboarding: "/onboarding",
 } as const;
 

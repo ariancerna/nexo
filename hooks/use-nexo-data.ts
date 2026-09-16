@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { defaultNexoData, createId } from "@/lib/nexo/default-data";
 import {
+  createDriveFileSignedUrl,
   createNexoSupabaseClient,
   getSupabaseUserId,
   normalizeNexoDataForSupabase,
@@ -52,7 +53,16 @@ export function useNexoData() {
   const [syncMessage, setSyncMessage] = useState("Modo local");
   const [userId, setUserId] = useState<string | null>(null);
   const lastRemoteSnapshot = useRef("");
+  const latestSnapshot = useRef("");
+  const saveQueue = useRef<Promise<void>>(Promise.resolve());
+  const mounted = useRef(true);
   const initialized = useRef(false);
+
+  useEffect(() => {
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -83,6 +93,7 @@ export function useNexoData() {
           setData(remoteData);
           window.localStorage.setItem(storageKey, snapshot);
           lastRemoteSnapshot.current = snapshot;
+          latestSnapshot.current = snapshot;
           setSyncStatus("synced");
           setSyncMessage("Sincronizado con Supabase");
         }
@@ -111,7 +122,9 @@ export function useNexoData() {
       return;
     }
 
-    window.localStorage.setItem(storageKey, JSON.stringify(data));
+    const snapshot = JSON.stringify(data);
+    latestSnapshot.current = snapshot;
+    window.localStorage.setItem(storageKey, snapshot);
   }, [data, ready]);
 
   useEffect(() => {
@@ -129,18 +142,25 @@ export function useNexoData() {
       setSyncStatus("syncing");
       setSyncMessage("Guardando cambios");
 
-      saveNexoDataToSupabase(userId, data)
-        .then((savedData) => {
-          const nextSnapshot = JSON.stringify(savedData);
-          lastRemoteSnapshot.current = nextSnapshot;
-          window.localStorage.setItem(storageKey, nextSnapshot);
-          setData(savedData);
-          setSyncStatus("synced");
-          setSyncMessage("Sincronizado con Supabase");
-        })
-        .catch((error: unknown) => {
-          setSyncStatus("error");
-          setSyncMessage(error instanceof Error ? error.message : "Cambios guardados localmente");
+      saveQueue.current = saveQueue.current
+        .catch(() => undefined)
+        .then(async () => {
+          try {
+            const savedData = await saveNexoDataToSupabase(userId, data);
+            const nextSnapshot = JSON.stringify(savedData);
+            lastRemoteSnapshot.current = nextSnapshot;
+
+            if (mounted.current && latestSnapshot.current === nextSnapshot) {
+              window.localStorage.setItem(storageKey, nextSnapshot);
+              setSyncStatus("synced");
+              setSyncMessage("Sincronizado con Supabase");
+            }
+          } catch (error: unknown) {
+            if (mounted.current && latestSnapshot.current === snapshot) {
+              setSyncStatus("error");
+              setSyncMessage(error instanceof Error ? error.message : "Cambios guardados localmente");
+            }
+          }
         });
     }, 900);
 
@@ -165,8 +185,8 @@ export function useNexoData() {
         return await Promise.all(fileList.map((file) => uploadDriveFileToSupabase(userId, file)));
       } catch (error) {
         setSyncStatus("error");
-        setSyncMessage(error instanceof Error ? error.message : "Archivos guardados como metadata local");
-        return fileList.map(createLocalDriveFile);
+        setSyncMessage(error instanceof Error ? error.message : "No se pudieron subir los archivos");
+        return [];
       }
     },
     [userId],
@@ -176,6 +196,21 @@ export function useNexoData() {
     () => ({
       setData,
       uploadDriveFiles,
+      openDriveFile: async (file: DriveFile) => {
+        if (!file.storagePath) {
+          setSyncStatus("error");
+          setSyncMessage("Este archivo sólo tiene metadata local");
+          return;
+        }
+
+        try {
+          const signedUrl = await createDriveFileSignedUrl(file.storagePath);
+          window.location.assign(signedUrl);
+        } catch (error) {
+          setSyncStatus("error");
+          setSyncMessage(error instanceof Error ? error.message : "No se pudo abrir el archivo");
+        }
+      },
       resetData: () => setData(normalizeNexoDataForSupabase(defaultNexoData)),
     }),
     [uploadDriveFiles],

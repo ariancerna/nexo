@@ -32,7 +32,7 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: "/icons/nexo-icon.svg",
-    apple: "/icons/nexo-icon.svg",
+    apple: "/icons/nexo-icon-192.png",
   },
   manifest: "/manifest.webmanifest",
 };
