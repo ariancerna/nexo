@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-const publicRoutes = ["/", "/login", "/register", "/forgot-password"];
+const publicRoutes = ["/", "/login", "/register", "/forgot-password", "/terminos", "/privacidad"];
 
 for (const route of publicRoutes) {
   test(`${route} renders without runtime or horizontal overflow errors`, async ({ page }) => {
@@ -52,31 +52,40 @@ test("landing hero fills the viewport and keeps its content over the image", asy
   expect(contentBox!.x + contentBox!.width).toBeLessThanOrEqual(heroBox!.x + heroBox!.width + 1);
 });
 
-test("login presents a centered form and white provider buttons", async ({ page }) => {
+test("login presents the split auth layout and Google provider button", async ({ page }) => {
   await page.goto("/login", { waitUntil: "networkidle" });
 
-  const card = page.locator("main section > div");
+  const card = page.locator(".auth-card");
+  const visual = page.locator(".auth-visual");
   const googleButton = page.getByRole("button", { name: "Continuar con Google" });
-  const microsoftButton = page.getByRole("button", { name: "Continuar con Microsoft" });
 
   await expect(card).toBeVisible();
   await expect(googleButton).toBeVisible();
-  await expect(microsoftButton).toBeVisible();
   await expect(googleButton).toHaveCSS("background-color", "rgb(255, 255, 255)");
-  await expect(microsoftButton).toHaveCSS("background-color", "rgb(255, 255, 255)");
   await expect(page.getByRole("link", { name: "Volver al inicio" })).toBeVisible();
 
   const box = await card.boundingBox();
   const viewport = page.viewportSize();
   expect(box).not.toBeNull();
   expect(viewport).not.toBeNull();
-  expect(box!.width).toBeLessThanOrEqual(Math.min(420, viewport!.width));
+  expect(box!.width).toBeLessThanOrEqual(Math.min(462, viewport!.width));
+
+  if (viewport!.width >= 1024) {
+    await expect(visual).toBeVisible();
+    const visualBox = await visual.boundingBox();
+    expect(visualBox).not.toBeNull();
+    expect(visualBox!.x).toBeLessThan(box!.x);
+  } else {
+    await expect(visual).toBeHidden();
+  }
 });
 
 test("auth screens expose the intended focused flows", async ({ page }) => {
   await page.goto("/register", { waitUntil: "networkidle" });
   await expect(page.getByRole("heading", { name: "Crea tu cuenta en Nexo" })).toBeVisible();
   await expect(page.getByRole("checkbox", { name: /Acepto los términos/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: "términos de servicio" })).toHaveAttribute("href", "/terminos");
+  await expect(page.getByRole("link", { name: "política de privacidad" })).toHaveAttribute("href", "/privacidad");
   await expect(page.getByRole("button", { name: "Crear cuenta gratis" })).toBeVisible();
 
   await page.goto("/forgot-password", { waitUntil: "networkidle" });

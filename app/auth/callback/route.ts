@@ -5,6 +5,8 @@ import {
   accountLinkRoute,
   dashboardRoute,
   getConfirmedOAuthProviders,
+  isOAuthProvider,
+  oauthProviderLabel,
   safeInternalPath,
   userHasLinkedProvider,
 } from "@/lib/auth/account-linking";
@@ -44,19 +46,22 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      if (provider === "google") {
+      if (isOAuthProvider(provider)) {
         const { data: userData } = await supabase.auth.getUser();
 
-        if (userData.user && userHasLinkedProvider(userData.user, "google")) {
+        if (userData.user && userHasLinkedProvider(userData.user, provider)) {
           const { data: settings } = await supabase
             .from("user_settings")
             .select("preferences")
             .eq("user_id", userData.user.id)
             .maybeSingle();
 
-          if (!getConfirmedOAuthProviders(settings?.preferences).includes("google")) {
+          if (!getConfirmedOAuthProviders(settings?.preferences).includes(provider)) {
             return NextResponse.redirect(
-              new URL(`${accountLinkRoute}?next=${encodeURIComponent(next)}`, requestUrl),
+              new URL(
+                `${accountLinkRoute}?next=${encodeURIComponent(next)}&provider=${encodeURIComponent(provider)}`,
+                requestUrl,
+              ),
             );
           }
         }
@@ -66,7 +71,11 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  const providerMessage = isOAuthProvider(provider)
+    ? `No pudimos completar el acceso con ${oauthProviderLabel(provider)}. Verifica que el proveedor esté habilitado e inténtalo nuevamente.`
+    : "El enlace de acceso no es válido o ya venció.";
+
   return NextResponse.redirect(
-    new URL(`${authRoutes.login}?message=${encodeURIComponent("El enlace de acceso no es válido o ya venció.")}`, requestUrl),
+    new URL(`${authRoutes.login}?message=${encodeURIComponent(providerMessage)}`, requestUrl),
   );
 }

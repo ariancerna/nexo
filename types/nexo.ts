@@ -51,6 +51,7 @@ export type Task = {
 export type CalendarEvent = {
   id: string;
   title: string;
+  description: string;
   location: string;
   startsAt: string;
   endsAt: string;
@@ -68,6 +69,7 @@ export type SavedItem = {
   spaceId: string | null;
   isFavorite: boolean;
   createdAt: string;
+  updatedAt: string;
 };
 
 export type NexoList = {
@@ -85,6 +87,7 @@ export type NexoListItem = {
   completed: boolean;
   position: number;
   createdAt: string;
+  updatedAt: string;
 };
 
 export type DriveFile = {
@@ -97,6 +100,7 @@ export type DriveFile = {
   isFavorite: boolean;
   isTrashed: boolean;
   createdAt: string;
+  updatedAt: string;
 };
 
 export type FocusSession = {

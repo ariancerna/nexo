@@ -1,12 +1,14 @@
 import { Link2, ShieldCheck } from "lucide-react";
 import { redirect } from "next/navigation";
 
-import { cancelGoogleAccountLink, confirmGoogleAccountLink } from "@/app/auth/actions";
+import { cancelOAuthAccountLink, confirmOAuthAccountLink } from "@/app/auth/actions";
 import { AuthCard } from "@/components/auth/auth-card";
 import { Button } from "@/components/ui/button";
 import {
   dashboardRoute,
   getConfirmedOAuthProviders,
+  isOAuthProvider,
+  oauthProviderLabel,
   safeInternalPath,
   userHasLinkedProvider,
 } from "@/lib/auth/account-linking";
@@ -16,10 +18,12 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 export default async function LinkAccountPage({
   searchParams,
 }: {
-  searchParams: Promise<{ message?: string; next?: string }>;
+  searchParams: Promise<{ message?: string; next?: string; provider?: string }>;
 }) {
-  const { message, next: requestedNext } = await searchParams;
+  const { message, next: requestedNext, provider: requestedProvider } = await searchParams;
   const next = safeInternalPath(requestedNext, dashboardRoute);
+  const provider = isOAuthProvider(requestedProvider) ? requestedProvider : "google";
+  const providerLabel = oauthProviderLabel(provider);
   const supabase = await createSupabaseServerClient();
   const { data: userData, error: userError } = await supabase.auth.getUser();
 
@@ -34,8 +38,8 @@ export default async function LinkAccountPage({
     .maybeSingle();
 
   if (
-    !userHasLinkedProvider(userData.user, "google") ||
-    getConfirmedOAuthProviders(settings?.preferences).includes("google")
+    !userHasLinkedProvider(userData.user, provider) ||
+    getConfirmedOAuthProviders(settings?.preferences).includes(provider)
   ) {
     redirect(next);
   }
@@ -45,28 +49,30 @@ export default async function LinkAccountPage({
       footer="Tú decides cómo iniciar sesión. Tus datos permanecen en una sola cuenta."
       message={message}
       showSocial={false}
-      subtitle={`Ya existe una cuenta de Nexo con ${userData.user.email}. Google verificó el mismo correo.`}
+      subtitle={`Ya existe una cuenta de Nexo con ${userData.user.email}. ${providerLabel} verificó el mismo correo.`}
       title="Encontramos tu cuenta"
     >
       <div className="mb-5 flex gap-3 rounded-xl bg-[var(--primary-soft)] p-4 text-sm leading-6 text-[var(--primary-strong)]">
         <Link2 aria-hidden className="mt-0.5 h-5 w-5 shrink-0" />
         <p>
-          ¿Quieres vincular Google para poder entrar más rápido sin crear otra cuenta ni duplicar tus datos?
+          ¿Quieres vincular {providerLabel} para poder entrar más rápido sin crear otra cuenta ni duplicar tus datos?
         </p>
       </div>
 
-      <form action={confirmGoogleAccountLink}>
+      <form action={confirmOAuthAccountLink}>
         <input name="next" type="hidden" value={next} />
+        <input name="provider" type="hidden" value={provider} />
         <Button className="w-full" type="submit" variant="primary">
           <ShieldCheck aria-hidden className="h-4 w-4" />
-          Sí, usar Google con esta cuenta
+          Sí, usar {providerLabel} con esta cuenta
         </Button>
       </form>
 
-      <form action={cancelGoogleAccountLink} className="mt-3">
+      <form action={cancelOAuthAccountLink} className="mt-3">
         <input name="next" type="hidden" value={next} />
+        <input name="provider" type="hidden" value={provider} />
         <Button className="w-full" type="submit" variant="secondary">
-          No vincular Google
+          No vincular {providerLabel}
         </Button>
       </form>
     </AuthCard>

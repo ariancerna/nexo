@@ -195,7 +195,11 @@ function LandingPage() {
             <div className="flex items-center gap-2 font-display text-lg font-black text-[#3327d4]"><Image alt="" height={20} src="/icons/nexo-mark.svg" width={20} />Nexo</div>
             <p className="mt-3 max-w-sm text-sm leading-6 text-[#77798c]">Un hub personal para organizar ideas, responsabilidades y archivos con claridad.</p>
           </div>
-          <p className="text-xs text-[#8b8c9b]">© 2026 Nexo. Privacidad y foco por diseño.</p>
+          <div className="flex flex-wrap items-center gap-4 text-xs text-[#8b8c9b]">
+            <Link className="font-bold hover:text-[#4f46e5]" href="/terminos">Términos</Link>
+            <Link className="font-bold hover:text-[#4f46e5]" href="/privacidad">Privacidad</Link>
+            <span>© 2026 Nexo. Privacidad y foco por diseño.</span>
+          </div>
         </div>
       </footer>
     </main>

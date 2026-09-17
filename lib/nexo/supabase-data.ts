@@ -3,7 +3,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { defaultNexoData } from "@/lib/nexo/default-data";
+import { createUuid, defaultNexoData } from "@/lib/nexo/default-data";
 import type {
   CalendarEvent,
   DriveFile,
@@ -29,23 +29,12 @@ type SyncTable =
   | "focus_sessions"
   | "list_items"
   | "files"
-  | "folders"
   | "notes"
   | "tasks"
   | "events"
   | "saved_items"
   | "lists"
   | "spaces";
-
-function createUuid() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-
-  return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (char) =>
-    (Number(char) ^ (Math.random() * 16) >> (Number(char) / 4)).toString(16),
-  );
-}
 
 function isUuid(value: string | null | undefined): value is string {
   return typeof value === "string" && uuidPattern.test(value);
@@ -60,11 +49,12 @@ function toNullableUuid(value: string | null | undefined, idMap: Map<string, str
     return null;
   }
 
-  return idMap.get(value) ?? (isUuid(value) ? value : null);
+  return idMap.get(value) ?? null;
 }
 
 function ensureUuid(value: string, idMap: Map<string, string>) {
   if (isUuid(value)) {
+    idMap.set(value, value);
     return value;
   }
 
@@ -141,7 +131,7 @@ function settingsToPreferences(settings: UserSettings): Json {
     animations: settings.animations,
     shadow_intensity: settings.shadowIntensity,
     enabled_modules: settings.enabledModules,
-    read_notification_ids: settings.readNotificationIds.slice(-200),
+    read_notification_ids: settings.readNotificationIds,
     confirmed_oauth_providers: settings.confirmedOAuthProviders,
   };
 }
@@ -171,12 +161,14 @@ export function normalizeNexoDataForSupabase(input: NexoData): NexoData {
 
   data.events = data.events.map((event) => ({
     ...event,
+    description: event.description ?? "",
     id: ensureUuid(event.id, new Map([[event.id, isUuid(event.id) ? event.id : createUuid()]])),
     spaceId: toNullableUuid(event.spaceId, spaceIds),
   }));
 
   data.savedItems = data.savedItems.map((item) => ({
     ...item,
+    updatedAt: item.updatedAt ?? item.createdAt,
     id: ensureUuid(item.id, new Map([[item.id, isUuid(item.id) ? item.id : createUuid()]])),
     spaceId: toNullableUuid(item.spaceId, spaceIds),
   }));
@@ -186,15 +178,27 @@ export function normalizeNexoDataForSupabase(input: NexoData): NexoData {
     return { ...list, id, spaceId: toNullableUuid(list.spaceId, spaceIds) };
   });
 
-  data.listItems = data.listItems.map((item) => ({
-    ...item,
-    id: ensureUuid(item.id, new Map([[item.id, isUuid(item.id) ? item.id : createUuid()]])),
-    listId: listIds.get(item.listId) ?? item.listId,
-  }));
+  data.listItems = data.listItems.flatMap((item) => {
+    const listId = listIds.get(item.listId);
+    if (!listId) return [];
+
+    return [{
+      ...item,
+      updatedAt: item.updatedAt ?? item.createdAt,
+      id: ensureUuid(item.id, new Map([[item.id, isUuid(item.id) ? item.id : createUuid()]])),
+      listId,
+    }];
+  });
 
   data.driveFiles = data.driveFiles.map((file) => {
     const id = ensureUuid(file.id, fileIds);
-    return { ...file, id, spaceId: toNullableUuid(file.spaceId, spaceIds), storagePath: file.storagePath ?? null };
+    return {
+      ...file,
+      id,
+      updatedAt: file.updatedAt ?? file.createdAt,
+      spaceId: toNullableUuid(file.spaceId, spaceIds),
+      storagePath: file.storagePath ?? null,
+    };
   });
 
   data.focusSessions = data.focusSessions.map((session) => ({
@@ -319,6 +323,7 @@ export async function loadNexoDataFromSupabase(supabase: NexoSupabaseClient): Pr
   const events: CalendarEvent[] = (eventsResult.data ?? []).map((event) => ({
     id: event.id,
     title: event.title,
+    description: event.description,
     location: event.location,
     startsAt: event.starts_at,
     endsAt: event.ends_at,
@@ -335,6 +340,7 @@ export async function loadNexoDataFromSupabase(supabase: NexoSupabaseClient): Pr
     spaceId: item.space_id,
     isFavorite: item.is_favorite,
     createdAt: item.created_at,
+    updatedAt: item.updated_at,
   }));
   const lists: NexoList[] = (listsResult.data ?? []).map((list) => ({
     id: list.id,
@@ -350,6 +356,7 @@ export async function loadNexoDataFromSupabase(supabase: NexoSupabaseClient): Pr
     completed: item.completed,
     position: item.position,
     createdAt: item.created_at,
+    updatedAt: item.updated_at,
   }));
   const driveFiles: DriveFile[] = (filesResult.data ?? []).map((file) => ({
     id: file.id,
@@ -361,6 +368,7 @@ export async function loadNexoDataFromSupabase(supabase: NexoSupabaseClient): Pr
     isFavorite: file.is_favorite,
     isTrashed: file.is_trashed,
     createdAt: file.created_at,
+    updatedAt: file.updated_at,
   }));
   const focusSessions = (focusSessionsResult.data ?? []).map((session) => ({
     id: session.id,
@@ -390,8 +398,8 @@ async function upsertRows<T>(
   }
 }
 
-async function deleteMissing(supabase: NexoSupabaseClient, table: SyncTable, ids: string[]) {
-  const query = supabase.from(table).delete();
+async function deleteMissing(supabase: NexoSupabaseClient, table: SyncTable, userId: string, ids: string[]) {
+  const query = supabase.from(table).delete().eq("user_id", userId);
   const result = ids.length ? await query.not("id", "in", `(${ids.join(",")})`) : await query;
 
   if (result.error) {
@@ -402,6 +410,7 @@ async function deleteMissing(supabase: NexoSupabaseClient, table: SyncTable, ids
 export async function saveNexoDataToSupabase(userId: string, input: NexoData) {
   const data = normalizeNexoDataForSupabase(input);
   const supabase = createNexoSupabaseClient();
+  const cloudFiles = data.driveFiles.filter((file) => file.storagePath);
 
   const { error: settingsError } = await supabase.from("user_settings").upsert(
     {
@@ -468,7 +477,7 @@ export async function saveNexoDataToSupabase(userId: string, input: NexoData) {
       user_id: userId,
       space_id: event.spaceId,
       title: event.title,
-      description: "",
+      description: event.description,
       location: event.location,
       starts_at: event.startsAt,
       ends_at: event.endsAt,
@@ -489,7 +498,7 @@ export async function saveNexoDataToSupabase(userId: string, input: NexoData) {
       type: item.type,
       is_favorite: item.isFavorite,
       created_at: item.createdAt,
-      updated_at: item.createdAt,
+      updated_at: item.updatedAt,
     })),
   );
   await upsertRows(
@@ -515,24 +524,24 @@ export async function saveNexoDataToSupabase(userId: string, input: NexoData) {
       completed: item.completed,
       position: item.position,
       created_at: item.createdAt,
-      updated_at: item.createdAt,
+      updated_at: item.updatedAt,
     })),
   );
   await upsertRows(
     supabase,
     "files",
-    data.driveFiles.map((file) => ({
+    cloudFiles.map((file) => ({
       id: file.id,
       user_id: userId,
       space_id: file.spaceId,
-      storage_path: file.storagePath ?? `${userId}/${file.id}/${file.name}`,
+      storage_path: file.storagePath as string,
       filename: file.name,
       mime_type: file.type,
       size_bytes: file.size,
       is_favorite: file.isFavorite,
       is_trashed: file.isTrashed,
       created_at: file.createdAt,
-      updated_at: file.createdAt,
+      updated_at: file.updatedAt,
     })),
   );
   await upsertRows(
@@ -549,15 +558,15 @@ export async function saveNexoDataToSupabase(userId: string, input: NexoData) {
     })),
   );
 
-  await deleteMissing(supabase, "focus_sessions", data.focusSessions.map((session) => session.id));
-  await deleteMissing(supabase, "list_items", data.listItems.map((item) => item.id));
-  await deleteMissing(supabase, "files", data.driveFiles.map((file) => file.id));
-  await deleteMissing(supabase, "notes", data.notes.map((note) => note.id));
-  await deleteMissing(supabase, "tasks", data.tasks.map((task) => task.id));
-  await deleteMissing(supabase, "events", data.events.map((event) => event.id));
-  await deleteMissing(supabase, "saved_items", data.savedItems.map((item) => item.id));
-  await deleteMissing(supabase, "lists", data.lists.map((list) => list.id));
-  await deleteMissing(supabase, "spaces", data.spaces.map((space) => space.id));
+  await deleteMissing(supabase, "focus_sessions", userId, data.focusSessions.map((session) => session.id));
+  await deleteMissing(supabase, "list_items", userId, data.listItems.map((item) => item.id));
+  await deleteMissing(supabase, "files", userId, cloudFiles.map((file) => file.id));
+  await deleteMissing(supabase, "notes", userId, data.notes.map((note) => note.id));
+  await deleteMissing(supabase, "tasks", userId, data.tasks.map((task) => task.id));
+  await deleteMissing(supabase, "events", userId, data.events.map((event) => event.id));
+  await deleteMissing(supabase, "saved_items", userId, data.savedItems.map((item) => item.id));
+  await deleteMissing(supabase, "lists", userId, data.lists.map((list) => list.id));
+  await deleteMissing(supabase, "spaces", userId, data.spaces.map((space) => space.id));
 
   return data;
 }
@@ -588,6 +597,7 @@ export async function uploadDriveFileToSupabase(userId: string, file: File) {
     isFavorite: false,
     isTrashed: false,
     createdAt,
+    updatedAt: createdAt,
   } satisfies DriveFile;
 }
 

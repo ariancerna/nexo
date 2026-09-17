@@ -26,8 +26,8 @@ export default async function LoginPage({
         </>
       }
       message={message}
-      subtitle="Tu espacio, todo en un solo lugar."
-      title="Nexo"
+      subtitle="Inicia sesión para continuar en tu espacio."
+      title="Bienvenido"
     >
       <form action={signInWithPassword} className="space-y-4">
         <EmailField />

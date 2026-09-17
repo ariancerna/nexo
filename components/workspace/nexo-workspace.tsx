@@ -38,6 +38,7 @@ import {
   Music2,
   Pause,
   Palette,
+  Pencil,
   Plane,
   Play,
   Plus,
@@ -67,6 +68,7 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 import { Input } from "@/components/ui/input";
 import { FeedbackDialog, type FeedbackDialogState } from "@/components/ui/feedback-dialog";
 import { Switch } from "@/components/ui/switch";
+import { StatusMessage } from "@/components/ui/status-message";
 import {
   buildWorkspaceNotifications,
   NotificationsPanel,
@@ -75,6 +77,7 @@ import {
 import { ProfileView } from "@/components/workspace/profile-view";
 import { useNexoData, type NexoSyncStatus } from "@/hooks/use-nexo-data";
 import { createId, formatBytes } from "@/lib/nexo/default-data";
+import { dateInputValueInTimeZone, formatNexoDate } from "@/lib/nexo/date";
 import type {
   CalendarEvent,
   DriveFile,
@@ -162,24 +165,20 @@ function getFormValue(formData: FormData, key: string) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function todayInputValue() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function dateTimeInputValue(date: Date) {
   const offset = date.getTimezoneOffset();
   return new Date(date.getTime() - offset * 60 * 1000).toISOString().slice(0, 16);
 }
 
-function formatDate(value: string) {
+function formatDate(value: string, timeZone?: string) {
   if (!value) {
     return "Sin fecha";
   }
 
-  return new Intl.DateTimeFormat("es", {
+  return formatNexoDate(value, timeZone, {
     dateStyle: "medium",
     timeStyle: value.includes("T") ? "short" : undefined,
-  }).format(new Date(value));
+  });
 }
 
 function formatTimer(seconds: number) {
@@ -229,21 +228,24 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
     ready,
     syncStatus,
     syncMessage,
+    saveConfirmation,
     setData,
     resetData,
     uploadDriveFiles,
     openDriveFile,
     deleteDriveFile,
+    retryLastOperation,
   } = useNexoData();
   const [activeModule, setActiveModule] = useState<ModuleKey>("dashboard");
   const [activeSpaceId, setActiveSpaceId] = useState<string | null>(null);
   const [profileUser, setProfileUser] = useState(user);
   const [query, setQuery] = useState("");
-  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [mobileModulesOpen, setMobileModulesOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [dialog, setDialog] = useState<FeedbackDialogState | null>(null);
   const [online, setOnline] = useState(true);
+  const [showSaveConfirmation, setShowSaveConfirmation] = useState(false);
   const [nowTick, setNowTick] = useState(Date.now());
   const [focus, setFocus] = useState<FocusState>({
     status: "idle",
@@ -336,6 +338,30 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
   }, []);
 
   useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setSearchOpen(true);
+      }
+
+      if (event.key === "Escape") {
+        setSearchOpen(false);
+        setQuery("");
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  useEffect(() => {
+    if (!saveConfirmation) return;
+    setShowSaveConfirmation(true);
+    const timeout = window.setTimeout(() => setShowSaveConfirmation(false), 2400);
+    return () => window.clearTimeout(timeout);
+  }, [saveConfirmation]);
+
+  useEffect(() => {
     const interval = window.setInterval(() => {
       setNowTick(Date.now());
     }, 1000);
@@ -358,7 +384,7 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
       ...current,
       focusSessions: [
         {
-          id: createId("focus"),
+          id: createId(),
           durationMinutes: Math.round(focus.durationSeconds / 60),
           completedAt,
           taskId: focus.taskId,
@@ -400,7 +426,7 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
     (first, second) => new Date(first.startsAt).getTime() - new Date(second.startsAt).getTime(),
   );
   const activeTasks = scopedTasks.filter((task) => task.status !== "completed");
-  const notifications = buildWorkspaceNotifications(data);
+  const notifications = buildWorkspaceNotifications(data, new Date(), profileUser.timezone);
   const unreadNotificationCount = notifications.filter(
     (notification) => !data.settings.readNotificationIds.includes(notification.id),
   ).length;
@@ -443,7 +469,7 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
 
     const createdAt = new Date().toISOString();
     const note: Note = {
-      id: createId("note"),
+      id: createId(),
       title,
       content: getFormValue(formData, "content"),
       spaceId: getFormValue(formData, "spaceId") || null,
@@ -478,7 +504,7 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
 
     const createdAt = new Date().toISOString();
     const task: Task = {
-      id: createId("task"),
+      id: createId(),
       title,
       description: getFormValue(formData, "description"),
       priority: (getFormValue(formData, "priority") as Priority) || "medium",
@@ -520,7 +546,7 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
 
     const createdAt = new Date().toISOString();
     const space: Space = {
-      id: createId("space"),
+      id: createId(),
       name,
       description: getFormValue(formData, "description"),
       icon: getFormValue(formData, "icon") || "general",
@@ -533,6 +559,30 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
     form.reset();
   };
 
+  const editSpace = (spaceId: string, event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const name = getFormValue(formData, "name");
+
+    if (!name) return;
+
+    setData((current) => ({
+      ...current,
+      spaces: current.spaces.map((space) =>
+        space.id === spaceId
+          ? {
+              ...space,
+              name,
+              description: getFormValue(formData, "description"),
+              icon: getFormValue(formData, "icon") || "general",
+              color: getFormValue(formData, "color") || "#4f46e5",
+              updatedAt: new Date().toISOString(),
+            }
+          : space,
+      ),
+    }));
+  };
+
   const addEvent = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
@@ -543,9 +593,21 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
       return;
     }
 
+    const startsAtDate = new Date(getFormValue(formData, "startsAt"));
+    const endsAtDate = new Date(getFormValue(formData, "endsAt"));
+
+    if (Number.isNaN(startsAtDate.getTime()) || Number.isNaN(endsAtDate.getTime())) {
+      setDialog({
+        title: "Revisa la fecha",
+        description: "Selecciona una fecha y hora válidas para el inicio y la finalización.",
+        variant: "info",
+      });
+      return;
+    }
+
     const createdAt = new Date().toISOString();
-    const startsAt = new Date(getFormValue(formData, "startsAt")).toISOString();
-    const endsAt = new Date(getFormValue(formData, "endsAt")).toISOString();
+    const startsAt = startsAtDate.toISOString();
+    const endsAt = endsAtDate.toISOString();
 
     if (new Date(endsAt).getTime() <= new Date(startsAt).getTime()) {
       setDialog({
@@ -556,8 +618,9 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
       return;
     }
     const calendarEvent: CalendarEvent = {
-      id: createId("event"),
+      id: createId(),
       title,
+      description: getFormValue(formData, "description"),
       location: getFormValue(formData, "location"),
       startsAt,
       endsAt,
@@ -633,15 +696,17 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
       return;
     }
 
+    const createdAt = new Date().toISOString();
     const savedItem: SavedItem = {
-      id: createId("saved"),
+      id: createId(),
       url: normalizedUrl,
       title: getFormValue(formData, "title") || normalizedUrl,
       description: getFormValue(formData, "description"),
       type: (getFormValue(formData, "type") as SavedItemType) || "link",
       spaceId: getFormValue(formData, "spaceId") || null,
       isFavorite: false,
-      createdAt: new Date().toISOString(),
+      createdAt,
+      updatedAt: createdAt,
     };
 
     setData((current) => ({ ...current, savedItems: [savedItem, ...current.savedItems] }));
@@ -652,7 +717,9 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
     setData((current) => ({
       ...current,
       savedItems: current.savedItems.map((item) =>
-        item.id === itemId ? { ...item, isFavorite: !item.isFavorite } : item,
+        item.id === itemId
+          ? { ...item, isFavorite: !item.isFavorite, updatedAt: new Date().toISOString() }
+          : item,
       ),
     }));
   };
@@ -678,7 +745,7 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
 
     const createdAt = new Date().toISOString();
     const list: NexoList = {
-      id: createId("list"),
+      id: createId(),
       name,
       spaceId: getFormValue(formData, "spaceId") || null,
       createdAt,
@@ -699,17 +766,19 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
       return;
     }
 
+    const createdAt = new Date().toISOString();
     setData((current) => ({
       ...current,
       listItems: [
         ...current.listItems,
         {
-          id: createId("list-item"),
+          id: createId(),
           listId,
           text,
           completed: false,
           position: current.listItems.filter((item) => item.listId === listId).length + 1,
-          createdAt: new Date().toISOString(),
+          createdAt,
+          updatedAt: createdAt,
         },
       ],
     }));
@@ -731,7 +800,7 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
       return;
     }
 
-    const nextFiles = await uploadDriveFiles(files);
+    const nextFiles = await uploadDriveFiles(files, activeSpaceId);
 
     setData((current) => ({
       ...current,
@@ -814,13 +883,7 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
   };
 
   if (!ready) {
-    return (
-      <div className="grid min-h-screen place-items-center bg-[var(--background)] text-[var(--foreground)]">
-        <div className="nexo-surface rounded-3xl p-6 font-display text-xl font-bold text-[var(--primary)]">
-          Cargando Nexo
-        </div>
-      </div>
-    );
+    return <WorkspaceSkeleton />;
   }
 
   return (
@@ -904,6 +967,7 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
         </div>
 
         <ProfileFooter
+          onRetry={retryLastOperation}
           onOpenProfile={() => setActiveModule("profile")}
           online={online}
           syncMessage={syncMessage}
@@ -916,29 +980,37 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <h1 className="truncate font-display text-xl font-bold lg:text-2xl">
-              {modules.find((module) => module.key === activeModule)?.label ?? "Nexo"}
+              {activeModule === "dashboard"
+                ? `Buenos días, ${profileUser.name.split(/\s+/)[0] || "Nexo"} 👋`
+                : modules.find((module) => module.key === activeModule)?.label ?? "Nexo"}
             </h1>
-            <p className="hidden text-sm text-[var(--muted)] sm:block">{online ? syncMessage : "Modo sin conexión"}</p>
+            <p className="hidden text-sm text-[var(--muted)] sm:block">
+              {activeModule === "dashboard"
+                ? formatNexoDate(new Date(), profileUser.timezone, { dateStyle: "full" })
+                : online
+                  ? syncMessage
+                  : "Modo sin conexión"}
+            </p>
           </div>
 
           <div className="flex items-center gap-2 lg:gap-3">
-            <label className="nexo-inset hidden w-80 items-center gap-2 rounded-2xl px-4 py-2 text-sm text-[var(--muted)] md:flex">
+            <button
+              aria-expanded={searchOpen}
+              className="nexo-inset hidden h-10 w-80 items-center gap-2 rounded-2xl px-4 text-left text-sm text-[var(--muted)] transition hover:text-[var(--foreground)] md:flex"
+              onClick={() => setSearchOpen(true)}
+              type="button"
+            >
               <Search aria-hidden className="h-4 w-4" />
-              <input
-                className="w-full bg-transparent outline-none placeholder:text-[var(--muted-soft)]"
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Buscar en Nexo..."
-                value={query}
-              />
-            </label>
+              <span className="flex-1">Buscar en Nexo...</span>
+              <kbd className="rounded-lg bg-[var(--surface-elevated)] px-2 py-1 text-[0.65rem] font-bold text-[var(--muted-soft)] shadow-sm">
+                Ctrl K
+              </kbd>
+            </button>
             <Button
-              aria-expanded={mobileSearchOpen}
-              aria-label={mobileSearchOpen ? "Cerrar búsqueda" : "Buscar"}
+              aria-expanded={searchOpen}
+              aria-label="Buscar"
               className="md:hidden"
-              onClick={() => {
-                setMobileSearchOpen((current) => !current);
-                if (mobileSearchOpen) setQuery("");
-              }}
+              onClick={() => setSearchOpen(true)}
               size="icon"
             >
               <Search aria-hidden className="h-5 w-5" />
@@ -966,6 +1038,7 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
                   onRead={markNotificationRead}
                   onReadAll={markAllNotificationsRead}
                   readIds={data.settings.readNotificationIds}
+                  timeZone={profileUser.timezone}
                 />
               ) : null}
             </div>
@@ -991,33 +1064,19 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
           </span>
         </button>
 
-        {mobileSearchOpen ? (
-          <label className="nexo-inset mt-3 flex items-center gap-2 rounded-2xl px-4 py-2 text-sm text-[var(--muted)] md:hidden">
-            <Search aria-hidden className="h-4 w-4" />
-            <input
-              autoFocus
-              className="w-full bg-transparent outline-none placeholder:text-[var(--muted-soft)]"
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar en Nexo..."
-              value={query}
-            />
-          </label>
-        ) : null}
       </header>
 
       <main className="pb-28 lg:ml-64 lg:pb-8">
         <div className="mx-auto max-w-7xl space-y-6 p-4 lg:p-8">
-          {query.trim() ? (
-            <SearchPanel
-              onClear={() => setQuery("")}
-              onOpenModule={(module) => {
-                setActiveModule(module);
-                setQuery("");
-              }}
-              results={searchResults}
-            />
+          {syncStatus === "error" ? (
+            <div className="flex flex-col gap-3 rounded-2xl border border-[var(--danger)] bg-[var(--danger-soft)] p-4 sm:flex-row sm:items-center sm:justify-between">
+              <StatusMessage tone="error" text={syncMessage} />
+              <Button onClick={retryLastOperation} size="sm">
+                <RotateCcw aria-hidden className="h-4 w-4" />
+                Reintentar
+              </Button>
+            </div>
           ) : null}
-
           {activeSpace ? (
             <ActiveSpaceBar
               data={data}
@@ -1037,6 +1096,7 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
               onNavigate={setActiveModule}
               onSelectSpace={selectSpace}
               spaces={data.spaces}
+              timeZone={profileUser.timezone}
             />
           ) : null}
           {activeModule === "notes" ? (
@@ -1056,12 +1116,15 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
                 setData((current) => ({
                   ...current,
                   notes: current.notes.map((note) =>
-                    note.id === noteId ? { ...note, isFavorite: !note.isFavorite } : note,
+                    note.id === noteId
+                      ? { ...note, isFavorite: !note.isFavorite, updatedAt: new Date().toISOString() }
+                      : note,
                   ),
                 }))
               }
               onUpdateContent={updateNoteContent}
               spaces={data.spaces}
+              timeZone={profileUser.timezone}
             />
           ) : null}
           {activeModule === "tasks" ? (
@@ -1072,10 +1135,17 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
               activeSpaceId={activeSpaceId}
               spaces={data.spaces}
               tasks={scopedTasks}
+              timeZone={profileUser.timezone}
             />
           ) : null}
           {activeModule === "drive" ? (
-            <DriveView driveFiles={scopedDriveFiles} onDelete={removeDriveFile} onOpen={openDriveFile} onUpload={addDriveFiles} />
+            <DriveView
+              driveFiles={scopedDriveFiles}
+              onDelete={removeDriveFile}
+              onOpen={openDriveFile}
+              onUpload={addDriveFiles}
+              spaces={data.spaces}
+            />
           ) : null}
           {activeModule === "calendar" ? (
             <CalendarView
@@ -1084,10 +1154,18 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
               events={scopedEvents}
               onDelete={deleteEvent}
               spaces={data.spaces}
+              timeZone={profileUser.timezone}
             />
           ) : null}
           {activeModule === "spaces" ? (
-            <SpacesView addSpace={addSpace} data={data} onDelete={deleteSpace} onOpen={selectSpace} spaces={data.spaces} />
+            <SpacesView
+              addSpace={addSpace}
+              data={data}
+              editSpace={editSpace}
+              onDelete={deleteSpace}
+              onOpen={selectSpace}
+              spaces={data.spaces}
+            />
           ) : null}
           {activeModule === "saved" ? (
             <SavedView
@@ -1120,6 +1198,8 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
               sessions={scopedFocusSessions}
               startFocus={startFocus}
               pauseFocus={pauseFocus}
+              tasks={activeTasks}
+              timeZone={profileUser.timezone}
             />
           ) : null}
           {activeModule === "profile" ? <ProfileView onUserUpdate={setProfileUser} user={profileUser} /> : null}
@@ -1247,19 +1327,79 @@ export function NexoWorkspace({ user }: { user: WorkspaceUser }) {
           <span className="mt-0.5 text-[0.68rem] font-bold">Módulos</span>
         </button>
       </nav>
+      {searchOpen ? (
+        <SearchPanel
+          onClear={() => {
+            setSearchOpen(false);
+            setQuery("");
+          }}
+          onOpenModule={(module) => {
+            setActiveModule(module);
+            setSearchOpen(false);
+            setQuery("");
+          }}
+          onQueryChange={setQuery}
+          query={query}
+          results={searchResults}
+        />
+      ) : null}
       <FeedbackDialog dialog={dialog} onClose={closeDialog} />
+      {showSaveConfirmation ? (
+        <div className="fixed bottom-24 right-4 z-50 w-[min(320px,calc(100vw-2rem))] lg:bottom-6">
+          <StatusMessage tone="success" text="Cambios guardados" />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function WorkspaceSkeleton() {
+  return (
+    <div
+      aria-busy="true"
+      aria-label="Cargando Nexo"
+      className="min-h-screen animate-pulse bg-[var(--background)] text-[var(--foreground)]"
+      role="status"
+    >
+      <aside className="fixed inset-y-0 left-0 hidden w-64 bg-[var(--surface)] p-5 lg:block">
+        <div className="h-11 w-32 rounded-2xl bg-[var(--surface-container)]" />
+        <div className="mt-8 space-y-3">
+          {Array.from({ length: 7 }, (_, index) => (
+            <div className="h-10 rounded-2xl bg-[var(--surface-container-low)]" key={index} />
+          ))}
+        </div>
+      </aside>
+      <div className="lg:ml-64">
+        <header className="h-20 border-b border-[var(--border)] bg-[var(--surface)] p-5">
+          <div className="h-8 w-48 rounded-xl bg-[var(--surface-container)]" />
+        </header>
+        <main className="mx-auto max-w-7xl space-y-6 p-4 lg:p-8">
+          <span className="sr-only">Cargando paneles del workspace</span>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {Array.from({ length: 4 }, (_, index) => (
+              <div className="nexo-surface h-28 rounded-3xl bg-[var(--surface-container-low)]" key={index} />
+            ))}
+          </div>
+          <div className="grid gap-6 lg:grid-cols-3">
+            <div className="nexo-surface h-80 rounded-3xl bg-[var(--surface-container-low)] lg:col-span-2" />
+            <div className="nexo-surface h-80 rounded-3xl bg-[var(--surface-container-low)]" />
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
 
 function ProfileFooter({
   onOpenProfile,
+  onRetry,
   online,
   syncMessage,
   syncStatus,
   user,
 }: {
   onOpenProfile: () => void;
+  onRetry: () => void;
   online: boolean;
   syncMessage: string;
   syncStatus: NexoSyncStatus;
@@ -1299,8 +1439,13 @@ function ProfileFooter({
           </Button>
         </form>
       </div>
-      <div className="nexo-inset rounded-2xl px-3 py-2 text-xs font-bold text-[var(--primary)]">
-        {online ? syncMessage : "Cambios guardados offline"}
+      <div className="nexo-inset flex items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs font-bold text-[var(--primary)]">
+        <span>{online ? syncMessage : "Cambios guardados offline"}</span>
+        {syncStatus === "error" ? (
+          <button className="underline underline-offset-2" onClick={onRetry} type="button">
+            Reintentar
+          </button>
+        ) : null}
       </div>
     </div>
   );
@@ -1356,48 +1501,128 @@ function getInitials(name: string) {
 }
 
 function SearchPanel({
+  query,
   results,
   onOpenModule,
+  onQueryChange,
   onClear,
 }: {
+  query: string;
   results: Array<{ id: string; type: string; title: string; module: ModuleKey }>;
   onOpenModule: (module: ModuleKey) => void;
+  onQueryChange: (query: string) => void;
   onClear: () => void;
 }) {
   return (
-    <Card className="nexo-floating p-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <CardTitle>Búsqueda global</CardTitle>
-          <CardDescription>Resultados sincronizados en tu espacio.</CardDescription>
-        </div>
-        <Button onClick={onClear} size="sm">
-          Cerrar
-        </Button>
-      </div>
-      <div className="mt-4 space-y-2">
-        {results.length ? (
-          results.map((result) => (
-            <button
-              className="nexo-surface-sm flex w-full items-center justify-between rounded-2xl p-3 text-left"
-              key={`${result.type}-${result.id}`}
-              onClick={() => onOpenModule(result.module)}
-              type="button"
-            >
-              <span>
-                <span className="block text-sm font-bold">{result.title}</span>
-                <span className="text-xs text-[var(--muted)]">{result.type}</span>
-              </span>
-              <Search aria-hidden className="h-4 w-4 text-[var(--primary)]" />
-            </button>
-          ))
-        ) : (
-          <p className="rounded-2xl bg-[var(--surface-container-low)] p-4 text-sm text-[var(--muted)]">
-            No encontré resultados con ese texto.
+    <div className="fixed inset-0 z-[70] flex items-start justify-center px-4 pt-[12svh] sm:pt-[16svh]">
+      <button
+        aria-label="Cerrar búsqueda"
+        className="absolute inset-0 bg-[color-mix(in_srgb,var(--foreground)_24%,transparent)] backdrop-blur-[3px]"
+        onClick={onClear}
+        type="button"
+      />
+      <section
+        aria-label="Búsqueda global de Nexo"
+        aria-modal="true"
+        className="nexo-floating relative z-10 w-full max-w-2xl overflow-hidden rounded-[1.65rem] border border-white/80 bg-[color-mix(in_srgb,var(--surface-elevated)_94%,transparent)]"
+        role="dialog"
+      >
+        <label className="flex h-16 items-center gap-3 border-b border-[var(--border)] px-5">
+          <Search aria-hidden className="h-5 w-5 shrink-0 text-[var(--primary)]" />
+          <input
+            autoFocus
+            className="min-w-0 flex-1 bg-transparent text-base font-medium outline-none placeholder:text-[var(--muted-soft)]"
+            onChange={(event) => onQueryChange(event.target.value)}
+            placeholder="Busca notas, tareas, archivos o espacios..."
+            value={query}
+          />
+          <kbd className="rounded-lg border border-[var(--border)] bg-[var(--surface-container-low)] px-2 py-1 text-[0.62rem] font-bold text-[var(--muted-soft)]">
+            ESC
+          </kbd>
+        </label>
+
+        <div className="max-h-[62svh] overflow-y-auto p-4 sm:p-5">
+          <p className="px-1 text-[0.65rem] font-bold uppercase tracking-[0.14em] text-[var(--muted-soft)]">
+            Acciones rápidas
           </p>
-        )}
-      </div>
-    </Card>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button className="command-action" onClick={() => onOpenModule("notes")} type="button">
+              <FileText aria-hidden className="h-4 w-4" />
+              Nueva nota
+            </button>
+            <button className="command-action" onClick={() => onOpenModule("tasks")} type="button">
+              <CheckCircle2 aria-hidden className="h-4 w-4" />
+              Nueva tarea
+            </button>
+            <button className="command-action" onClick={() => onOpenModule("drive")} type="button">
+              <Upload aria-hidden className="h-4 w-4" />
+              Subir archivo
+            </button>
+          </div>
+
+          <div className="mt-5 flex items-center justify-between px-1">
+            <p className="text-[0.65rem] font-bold uppercase tracking-[0.14em] text-[var(--muted-soft)]">
+              {query.trim() ? "Resultados" : "Empieza a escribir para buscar"}
+            </p>
+            {query.trim() ? <span className="text-xs text-[var(--muted-soft)]">{results.length} encontrados</span> : null}
+          </div>
+
+          <div className="mt-2 space-y-2">
+            {query.trim() && results.length ? (
+              results.map((result) => {
+                const moduleItem = modules.find((module) => module.key === result.module);
+                const ResultIcon = moduleItem?.icon ?? Search;
+
+                return (
+                  <button
+                    className="group flex w-full items-center gap-3 rounded-2xl p-3 text-left transition hover:bg-[var(--primary-soft)]"
+                    key={`${result.type}-${result.id}`}
+                    onClick={() => onOpenModule(result.module)}
+                    type="button"
+                  >
+                    <span className="nexo-inset flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[var(--primary)]">
+                      <ResultIcon aria-hidden className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-bold">{result.title}</span>
+                      <span className="text-xs text-[var(--muted)]">{result.type}</span>
+                    </span>
+                    <span className="text-xs font-semibold text-[var(--muted-soft)] transition group-hover:text-[var(--primary)]">
+                      Abrir ↗
+                    </span>
+                  </button>
+                );
+              })
+            ) : query.trim() ? (
+              <p className="rounded-2xl bg-[var(--surface-container-low)] p-5 text-center text-sm text-[var(--muted)]">
+                No encontré resultados con ese texto.
+              </p>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {modules.slice(0, 8).map((module) => {
+                  const Icon = module.icon;
+                  return (
+                    <button
+                      className="flex items-center gap-3 rounded-2xl p-3 text-left text-sm font-semibold transition hover:bg-[var(--surface-container-low)]"
+                      key={module.key}
+                      onClick={() => onOpenModule(module.key)}
+                      type="button"
+                    >
+                      <Icon aria-hidden className="h-4 w-4 text-[var(--primary)]" />
+                      {module.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+        <footer className="flex items-center justify-between border-t border-[var(--border)] px-5 py-3 text-[0.68rem] font-medium text-[var(--muted-soft)]">
+          <span>↑↓ Navegar · Enter seleccionar</span>
+          <span>Nexo Life Hub</span>
+        </footer>
+      </section>
+    </div>
   );
 }
 
@@ -1410,6 +1635,7 @@ function DashboardView({
   focusSessions,
   onNavigate,
   onSelectSpace,
+  timeZone,
 }: {
   activeTasks: Task[];
   notes: Note[];
@@ -1419,6 +1645,7 @@ function DashboardView({
   focusSessions: NexoData["focusSessions"];
   onNavigate: (module: ModuleKey) => void;
   onSelectSpace: (spaceId: string) => void;
+  timeZone: string;
 }) {
   const completedFocusMinutes = focusSessions.reduce((total, session) => total + session.durationMinutes, 0);
 
@@ -1436,7 +1663,7 @@ function DashboardView({
           <CardHeader>
             <div>
               <CardTitle>Hoy</CardTitle>
-              <CardDescription>{new Intl.DateTimeFormat("es", { dateStyle: "full" }).format(new Date())}</CardDescription>
+              <CardDescription>{formatNexoDate(new Date(), timeZone, { dateStyle: "full" })}</CardDescription>
             </div>
             <CalendarDays aria-hidden className="h-5 w-5 text-[var(--primary)]" />
           </CardHeader>
@@ -1444,7 +1671,7 @@ function DashboardView({
             {events.slice(0, 3).map((event) => (
               <div className="nexo-inset rounded-2xl p-3" key={event.id}>
                 <p className="text-sm font-bold">{event.title}</p>
-                <p className="mt-1 text-xs text-[var(--muted)]">{formatDate(event.startsAt)}</p>
+                <p className="mt-1 text-xs text-[var(--muted)]">{formatDate(event.startsAt, timeZone)}</p>
               </div>
             ))}
           </div>
@@ -1587,6 +1814,7 @@ function NotesView({
   onUpdateContent,
   onToggleFavorite,
   onDeleteNote,
+  timeZone,
 }: {
   activeSpaceId: string | null;
   notes: Note[];
@@ -1595,6 +1823,7 @@ function NotesView({
   onUpdateContent: (noteId: string, content: string) => void;
   onToggleFavorite: (noteId: string) => void;
   onDeleteNote: (note: Note) => void;
+  timeZone: string;
 }) {
   return (
     <div className="grid gap-6 xl:grid-cols-[360px_1fr]">
@@ -1638,7 +1867,7 @@ function NotesView({
                 onBlur={(event) => onUpdateContent(note.id, event.target.value)}
                 defaultValue={note.content}
               />
-              <p className="mt-3 text-xs text-[var(--muted-soft)]">Guardado local: {formatDate(note.updatedAt)}</p>
+              <p className="mt-3 text-xs text-[var(--muted-soft)]">Guardado local: {formatDate(note.updatedAt, timeZone)}</p>
             </Card>
           );
         })}
@@ -1655,6 +1884,7 @@ function TasksView({
   addTask,
   onDelete,
   onUpdateStatus,
+  timeZone,
 }: {
   activeSpaceId: string | null;
   tasks: Task[];
@@ -1662,85 +1892,144 @@ function TasksView({
   addTask: (event: React.FormEvent<HTMLFormElement>) => void;
   onDelete: (task: Task) => void;
   onUpdateStatus: (taskId: string, status: TaskStatus) => void;
+  timeZone: string;
 }) {
-  return (
-    <div className="space-y-6">
-      <Card className="p-5">
-        <CardTitle>Nueva tarea</CardTitle>
-        <form className="mt-4 grid gap-3 xl:grid-cols-[1fr_1fr_140px_160px_180px_auto]" onSubmit={addTask}>
-          <Input name="title" placeholder="Título" required />
-          <Input name="description" placeholder="Descripción" />
-          <select className="nexo-inset h-11 rounded-2xl px-3 text-sm outline-none" defaultValue="medium" name="priority">
-            {priorities.map((priority) => (
-              <option key={priority} value={priority}>
-                {priority === "high" ? "Alta" : priority === "medium" ? "Media" : "Baja"}
-              </option>
-            ))}
-          </select>
-          <Input name="dueDate" type="date" defaultValue={todayInputValue()} />
-          <SpaceSelect defaultValue={activeSpaceId} spaces={spaces} />
-          <Button type="submit" variant="primary">
-            Crear
-          </Button>
-        </form>
-      </Card>
-      <div className="grid gap-4 xl:grid-cols-3">
-        {taskStatuses.map((status) => (
-          <Card className="p-5" key={status}>
-            <CardTitle>
-              {status === "todo" ? "Por hacer" : status === "in_progress" ? "En progreso" : "Completadas"}
-            </CardTitle>
-            <div className="mt-4 space-y-3">
-              {tasks
-                .filter((task) => task.status === status)
-                .map((task) => {
-                  const space = getSpace(spaces, task.spaceId);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(tasks[0]?.id ?? null);
+  const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? tasks[0] ?? null;
+  const selectedSpace = selectedTask ? getSpace(spaces, selectedTask.spaceId) : null;
 
-                  return (
-                    <div className="nexo-surface-sm rounded-2xl p-4" key={task.id}>
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-bold">{task.title}</p>
-                          <p className="mt-1 text-xs text-[var(--muted)]">{task.description || "Sin descripción"}</p>
-                        </div>
-                        <span className="rounded-full bg-[var(--primary-soft)] px-2 py-0.5 text-xs font-bold text-[var(--primary-strong)]">
-                          {task.priority === "high" ? "Alta" : task.priority === "medium" ? "Media" : "Baja"}
-                        </span>
-                      </div>
-                      <p className="mt-3 text-xs text-[var(--muted)]">
-                        {space?.name ?? "Sin espacio"} · {task.dueDate || "Sin fecha"}
-                      </p>
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        {taskStatuses.map((nextStatus) => (
-                          <Button
-                            key={nextStatus}
-                            onClick={() => onUpdateStatus(task.id, nextStatus)}
-                            size="sm"
-                            variant={nextStatus === task.status ? "inset" : "secondary"}
-                          >
-                            {nextStatus === "todo" ? "Todo" : nextStatus === "in_progress" ? "Progreso" : "Lista"}
-                          </Button>
-                        ))}
-                        <Button
-                          aria-label={`Eliminar ${task.title}`}
-                          className="ml-auto"
-                          onClick={() => onDelete(task)}
-                          size="icon"
-                          title="Eliminar tarea"
-                          variant="ghost"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              {!tasks.some((task) => task.status === status) ? (
-                <p className="py-8 text-center text-sm text-[var(--muted)]">Sin tareas en esta columna.</p>
-              ) : null}
-            </div>
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="font-display text-2xl font-bold">Gestor de Tareas</h2>
+            <span className="rounded-full bg-[var(--primary-soft)] px-2 py-1 text-[0.65rem] font-bold text-[var(--primary-strong)]">
+              {tasks.filter((task) => task.status !== "completed").length} activas
+            </span>
+          </div>
+          <p className="mt-1 text-sm text-[var(--muted)]">Organiza prioridades, flujos de trabajo y entregas personales.</p>
+        </div>
+        <details className="group relative z-20">
+          <summary className="inline-flex min-h-10 cursor-pointer list-none items-center justify-center gap-2 rounded-2xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary-foreground)] nexo-primary-shadow">
+            <Plus aria-hidden className="h-4 w-4" />
+            Nueva tarea
+          </summary>
+          <Card className="absolute right-0 top-12 w-[min(580px,calc(100vw-2rem))] p-5 shadow-2xl">
+            <CardTitle>Crear nueva tarea</CardTitle>
+            <form className="mt-4 grid gap-3 sm:grid-cols-2" onSubmit={addTask}>
+              <Input name="title" placeholder="Título" required />
+              <Input name="description" placeholder="Descripción" />
+              <select className="nexo-inset h-11 rounded-2xl px-3 text-sm outline-none" defaultValue="medium" name="priority">
+                {priorities.map((priority) => (
+                  <option key={priority} value={priority}>
+                    {priority === "high" ? "Alta" : priority === "medium" ? "Media" : "Baja"}
+                  </option>
+                ))}
+              </select>
+              <Input name="dueDate" type="date" defaultValue={dateInputValueInTimeZone(new Date(), timeZone)} />
+              <SpaceSelect defaultValue={activeSpaceId} spaces={spaces} />
+              <Button type="submit" variant="primary">Crear tarea</Button>
+            </form>
           </Card>
-        ))}
+        </details>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="font-bold uppercase tracking-[0.12em] text-[var(--muted-soft)]">Filtrar por</span>
+        <span className="command-action">Todos los espacios</span>
+        <span className="command-action">Prioridad</span>
+        <span className="command-action">Fecha de entrega</span>
+      </div>
+
+      <div className={selectedTask ? "grid gap-5 2xl:grid-cols-[minmax(0,1fr)_340px]" : ""}>
+        <div className="grid gap-4 md:grid-cols-3">
+          {taskStatuses.map((status) => {
+            const statusTasks = tasks.filter((task) => task.status === status);
+            return (
+              <section className="nexo-inset min-h-[540px] rounded-[var(--radius)] p-3" key={status}>
+                <div className="flex items-center justify-between px-1 py-2">
+                  <h3 className="font-display text-sm font-bold">
+                    {status === "todo" ? "Por hacer" : status === "in_progress" ? "En progreso" : "Completadas"}
+                  </h3>
+                  <span className="rounded-full bg-[var(--surface-elevated)] px-2 py-0.5 text-xs font-bold text-[var(--muted)]">{statusTasks.length}</span>
+                </div>
+                <div className="mt-2 space-y-3">
+                  {statusTasks.map((task) => {
+                    const space = getSpace(spaces, task.spaceId);
+                    const selected = selectedTask?.id === task.id;
+                    return (
+                      <article
+                        className={selected ? "rounded-2xl border border-[var(--primary)] bg-[var(--surface-elevated)] p-3 shadow-lg" : "nexo-surface-sm rounded-2xl border border-transparent p-3"}
+                        key={task.id}
+                      >
+                        <button className="w-full text-left" onClick={() => setSelectedTaskId(task.id)} type="button">
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="rounded-md bg-[var(--primary-soft)] px-2 py-1 text-[0.6rem] font-bold text-[var(--primary-strong)]">
+                              {space?.name ?? "Personal"}
+                            </span>
+                            <span className={task.priority === "high" ? "text-[0.62rem] font-bold text-[var(--danger)]" : "text-[0.62rem] font-bold text-[var(--muted-soft)]"}>
+                              {task.priority === "high" ? "Alta" : task.priority === "medium" ? "Media" : "Baja"}
+                            </span>
+                          </div>
+                          <h4 className="mt-3 text-sm font-bold leading-5">{task.title}</h4>
+                          <p className="mt-1 line-clamp-3 text-xs leading-5 text-[var(--muted)]">{task.description || "Sin descripción"}</p>
+                          <p className="mt-3 text-[0.65rem] text-[var(--muted-soft)]">{task.dueDate || "Sin fecha"}</p>
+                        </button>
+                        <div className="mt-3 flex items-center gap-1 border-t border-[var(--border)] pt-2">
+                          {taskStatuses.map((nextStatus) => (
+                            <button
+                              aria-label={`Mover ${task.title} a ${nextStatus}`}
+                              className={nextStatus === task.status ? "h-6 flex-1 rounded-lg bg-[var(--primary)] text-[0.6rem] font-bold text-white" : "h-6 flex-1 rounded-lg text-[0.6rem] font-bold text-[var(--muted)] hover:bg-[var(--surface-container)]"}
+                              key={nextStatus}
+                              onClick={() => onUpdateStatus(task.id, nextStatus)}
+                              type="button"
+                            >
+                              {nextStatus === "todo" ? "Todo" : nextStatus === "in_progress" ? "Curso" : "Lista"}
+                            </button>
+                          ))}
+                        </div>
+                      </article>
+                    );
+                  })}
+                  {!statusTasks.length ? <p className="py-10 text-center text-xs text-[var(--muted)]">Sin tareas</p> : null}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+
+        {selectedTask ? (
+          <Card className="h-fit p-5 2xl:sticky 2xl:top-24">
+            <div className="flex items-center justify-between">
+              <p className="text-[0.65rem] font-bold uppercase tracking-[0.14em] text-[var(--primary)]">Detalle de tarea</p>
+              <Button aria-label="Cerrar detalle" onClick={() => setSelectedTaskId(null)} size="icon" variant="ghost">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <p className="mt-5 text-[0.65rem] font-bold uppercase tracking-[0.12em] text-[var(--muted-soft)]">Título</p>
+            <h3 className="mt-2 font-display text-xl font-bold">{selectedTask.title}</h3>
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              {taskStatuses.map((status) => (
+                <Button key={status} onClick={() => onUpdateStatus(selectedTask.id, status)} size="sm" variant={status === selectedTask.status ? "primary" : "secondary"}>
+                  {status === "todo" ? "Por hacer" : status === "in_progress" ? "En curso" : "Lista"}
+                </Button>
+              ))}
+            </div>
+            <dl className="mt-5 grid grid-cols-2 gap-3 text-xs">
+              <div className="nexo-inset rounded-xl p-3"><dt className="text-[var(--muted-soft)]">Entrega</dt><dd className="mt-1 font-bold">{selectedTask.dueDate || "Sin fecha"}</dd></div>
+              <div className="nexo-inset rounded-xl p-3"><dt className="text-[var(--muted-soft)]">Prioridad</dt><dd className="mt-1 font-bold capitalize">{selectedTask.priority}</dd></div>
+              <div className="nexo-inset col-span-2 rounded-xl p-3"><dt className="text-[var(--muted-soft)]">Espacio</dt><dd className="mt-1 font-bold">{selectedSpace?.name ?? "Personal"}</dd></div>
+            </dl>
+            <div className="mt-5">
+              <p className="text-[0.65rem] font-bold uppercase tracking-[0.12em] text-[var(--muted-soft)]">Notas</p>
+              <p className="mt-2 rounded-2xl bg-[var(--surface-container-low)] p-4 text-sm leading-6 text-[var(--muted)]">{selectedTask.description || "Esta tarea todavía no tiene notas."}</p>
+            </div>
+            <Button className="mt-5 w-full text-[var(--danger)]" onClick={() => onDelete(selectedTask)}>
+              <Trash2 className="h-4 w-4" /> Eliminar tarea
+            </Button>
+          </Card>
+        ) : null}
       </div>
     </div>
   );
@@ -1764,22 +2053,30 @@ function TaskRow({ task }: { task: Task }) {
 
 function DriveView({
   driveFiles,
+  spaces,
   onDelete,
   onOpen,
   onUpload,
 }: {
   driveFiles: DriveFile[];
+  spaces: Space[];
   onDelete: (file: DriveFile) => Promise<void>;
   onOpen: (file: DriveFile) => Promise<void>;
   onUpload: (files: FileList | null) => Promise<void>;
 }) {
+  const totalBytes = driveFiles.reduce((total, file) => total + file.size, 0);
+  const capacity = 5 * 1024 * 1024 * 1024;
+  const usedPercentage = Math.min(100, (totalBytes / capacity) * 100);
+  const categorySize = (match: (file: DriveFile) => boolean) =>
+    driveFiles.filter(match).reduce((total, file) => total + file.size, 0);
+
   return (
     <div className="space-y-6">
       <Card className="p-5">
         <CardHeader>
           <div>
-            <CardTitle>Drive</CardTitle>
-            <CardDescription>Sube archivos a tu espacio privado y mantén sus detalles sincronizados.</CardDescription>
+            <CardTitle>Almacenamiento Cloud</CardTitle>
+            <CardDescription>{formatBytes(totalBytes)} de 5 GB utilizados en tu espacio de trabajo</CardDescription>
           </div>
           <label className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-2xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary-foreground)] nexo-primary-shadow">
             <Upload className="h-4 w-4" />
@@ -1795,14 +2092,55 @@ function DriveView({
             />
           </label>
         </CardHeader>
+        <div className="mt-5 h-2 overflow-hidden rounded-full bg-[var(--surface-container-high)]">
+          <div className="h-full rounded-full bg-[linear-gradient(90deg,var(--primary),var(--tertiary))]" style={{ width: `${Math.max(usedPercentage, totalBytes ? 2 : 0)}%` }} />
+        </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            ["Documentos", categorySize((file) => /pdf|document|text/i.test(file.type))],
+            ["Imágenes", categorySize((file) => file.type.startsWith("image/"))],
+            ["Código", categorySize((file) => /json|javascript|typescript|sql|zip/i.test(file.type))],
+            ["Otros archivos", categorySize((file) => !/pdf|document|text|image|json|javascript|typescript|sql|zip/i.test(file.type))],
+          ].map(([label, size], index) => (
+            <div className="flex items-center gap-3" key={String(label)}>
+              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: ["#4f46e5", "#06b6d4", "#10b981", "#f59e0b"][index] }} />
+              <div><p className="text-xs font-bold">{label}</p><p className="text-[0.68rem] text-[var(--muted)]">{formatBytes(Number(size))}</p></div>
+            </div>
+          ))}
+        </div>
       </Card>
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+
+      {spaces.length ? (
+        <section>
+          <div className="mb-3 flex items-center justify-between"><h2 className="font-display text-lg font-bold">Carpetas</h2><span className="text-xs text-[var(--muted)]">{spaces.length} espacios</span></div>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {spaces.slice(0, 4).map((space) => (
+              <Card className="p-4" key={space.id}>
+                <div className="flex items-start justify-between"><span className="nexo-inset flex h-10 w-10 items-center justify-center rounded-xl" style={{ color: space.color }}><FolderOpen className="h-5 w-5" /></span><span className="text-[var(--muted-soft)]">•••</span></div>
+                <h3 className="mt-5 truncate text-sm font-bold">{space.name}</h3>
+                <p className="mt-1 text-xs text-[var(--muted)]">{driveFiles.filter((file) => file.spaceId === space.id).length} archivos</p>
+              </Card>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <label className="flex min-h-44 cursor-pointer flex-col items-center justify-center rounded-[var(--radius)] border border-dashed border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-elevated)_52%,transparent)] p-6 text-center transition hover:border-[var(--primary)] hover:bg-[var(--primary-soft)]">
+        <span className="nexo-surface flex h-12 w-12 items-center justify-center rounded-2xl text-[var(--primary)]"><Upload className="h-5 w-5" /></span>
+        <span className="mt-4 text-sm font-bold">Arrastra tus archivos aquí o haz clic para explorar</span>
+        <span className="mt-1 text-xs text-[var(--muted)]">Tus archivos se guardan de forma privada.</span>
+        <input className="sr-only" multiple onChange={(event) => { void onUpload(event.target.files); event.currentTarget.value = ""; }} type="file" />
+      </label>
+
+      <section>
+        <div className="mb-3 flex items-center justify-between"><h2 className="font-display text-lg font-bold">Archivos recientes</h2><span className="text-xs text-[var(--muted)]">{driveFiles.length} elementos</span></div>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {driveFiles.map((file) => (
-          <Card className="p-5" key={file.id}>
-            <FolderOpen className="h-7 w-7 text-[var(--primary)]" />
-            <h2 className="mt-4 truncate font-display text-lg font-bold">{file.name}</h2>
-            <p className="mt-2 text-sm text-[var(--muted)]">{formatBytes(file.size)}</p>
-            <p className="text-xs text-[var(--muted-soft)]">{file.type}</p>
+          <Card className="p-4" key={file.id}>
+            <div className="nexo-inset flex h-28 items-center justify-center rounded-2xl"><FileText className="h-9 w-9 text-[var(--primary)]" /></div>
+            <h2 className="mt-4 truncate text-sm font-bold">{file.name}</h2>
+            <p className="mt-1 text-xs text-[var(--muted)]">{formatBytes(file.size)}</p>
+            <p className="truncate text-[0.68rem] text-[var(--muted-soft)]">{file.type}</p>
             <p className="mt-2 truncate text-xs text-[var(--muted-soft)]">
               {file.storagePath ? "Guardado en la nube" : "Sólo en este dispositivo"}
             </p>
@@ -1829,8 +2167,9 @@ function DriveView({
           </Card>
         ))}
         {!driveFiles.length ? <EmptyState icon={FolderOpen} message="No hay archivos. Sube uno para guardarlo de forma privada." /> : null}
+        </div>
+      </section>
       </div>
-    </div>
   );
 }
 
@@ -1840,12 +2179,14 @@ function CalendarView({
   spaces,
   addEvent,
   onDelete,
+  timeZone,
 }: {
   activeSpaceId: string | null;
   events: CalendarEvent[];
   spaces: Space[];
   addEvent: (event: React.FormEvent<HTMLFormElement>) => void;
   onDelete: (event: CalendarEvent) => void;
+  timeZone: string;
 }) {
   return (
     <div className="grid gap-6 xl:grid-cols-[360px_1fr]">
@@ -1853,6 +2194,7 @@ function CalendarView({
         <CardTitle>Nuevo evento</CardTitle>
         <form className="mt-4 space-y-3" onSubmit={addEvent}>
           <Input name="title" placeholder="Título" required />
+          <Input name="description" placeholder="Descripción" />
           <Input name="location" placeholder="Lugar o enlace" />
           <Input name="startsAt" type="datetime-local" defaultValue={dateTimeInputValue(new Date())} required />
           <Input
@@ -1878,6 +2220,7 @@ function CalendarView({
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <h2 className="font-display text-lg font-bold">{event.title}</h2>
+                    <p className="mt-1 text-sm text-[var(--muted)]">{event.description || "Sin descripción"}</p>
                     <p className="mt-1 text-sm text-[var(--muted)]">{event.location || "Sin ubicación"}</p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1896,7 +2239,7 @@ function CalendarView({
                   </div>
                 </div>
                 <p className="mt-4 text-sm text-[var(--muted)]">
-                  {formatDate(event.startsAt)} - {formatDate(event.endsAt)}
+                  {formatDate(event.startsAt, timeZone)} - {formatDate(event.endsAt, timeZone)}
                 </p>
               </Card>
             );
@@ -1907,16 +2250,54 @@ function CalendarView({
   );
 }
 
+function SpaceFormFields({ space }: { space?: Space }) {
+  return (
+    <>
+      <Input defaultValue={space?.name} name="name" placeholder="Nombre" required />
+      <Input defaultValue={space?.description} name="description" placeholder="Descripción" />
+      <fieldset>
+        <legend className="mb-2 text-sm font-bold">Icono</legend>
+        <div className="grid max-h-48 grid-cols-6 gap-2 overflow-y-auto p-1">
+          {spaceIconOptions.map((option, index) => {
+            const Icon = option.icon;
+            const selected = space
+              ? option.value === space.icon || option.aliases.some((alias) => alias === space.icon)
+              : index === 0;
+            return (
+              <label className="cursor-pointer" key={option.value} title={option.label}>
+                <input
+                  className="peer sr-only"
+                  defaultChecked={selected}
+                  name="icon"
+                  type="radio"
+                  value={option.value}
+                />
+                <span className="nexo-surface-sm flex h-10 items-center justify-center rounded-xl border border-[var(--border)] text-[var(--foreground)] transition peer-checked:border-[var(--primary)] peer-checked:bg-[var(--primary)] peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--primary)]">
+                  <Icon aria-hidden className="h-5 w-5" strokeWidth={2.25} />
+                  <span className="sr-only">{option.label}</span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+      <Input defaultValue={space?.color ?? "#4f46e5"} name="color" type="color" />
+    </>
+  );
+}
+
 function SpacesView({
   spaces,
   data,
   addSpace,
+  editSpace,
   onDelete,
   onOpen,
 }: {
   spaces: Space[];
   data: NexoData;
   addSpace: (event: React.FormEvent<HTMLFormElement>) => void;
+  editSpace: (spaceId: string, event: React.FormEvent<HTMLFormElement>) => void;
   onDelete: (space: Space) => void;
   onOpen: (spaceId: string) => void;
 }) {
@@ -1925,32 +2306,7 @@ function SpacesView({
       <Card className="p-5">
         <CardTitle>Nuevo espacio</CardTitle>
         <form className="mt-4 space-y-3" onSubmit={addSpace}>
-          <Input name="name" placeholder="Nombre" required />
-          <Input name="description" placeholder="Descripción" />
-          <fieldset>
-            <legend className="mb-2 text-sm font-bold">Icono</legend>
-            <div className="grid max-h-48 grid-cols-6 gap-2 overflow-y-auto p-1">
-              {spaceIconOptions.map((option, index) => {
-                const Icon = option.icon;
-                return (
-                  <label className="cursor-pointer" key={option.value} title={option.label}>
-                    <input
-                      className="peer sr-only"
-                      defaultChecked={index === 0}
-                      name="icon"
-                      type="radio"
-                      value={option.value}
-                    />
-                    <span className="nexo-surface-sm flex h-10 items-center justify-center rounded-xl border border-[var(--border)] text-[var(--foreground)] transition peer-checked:border-[var(--primary)] peer-checked:bg-[var(--primary)] peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--primary)]">
-                      <Icon aria-hidden className="h-5 w-5" strokeWidth={2.25} />
-                      <span className="sr-only">{option.label}</span>
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          </fieldset>
-          <Input name="color" type="color" defaultValue="#4f46e5" />
+          <SpaceFormFields />
           <Button className="w-full" type="submit" variant="primary">
             Crear espacio
           </Button>
@@ -2003,6 +2359,18 @@ function SpacesView({
               Abrir espacio
               <ExternalLink aria-hidden className="h-4 w-4" />
             </Button>
+            <details className="mt-3 rounded-2xl border border-[var(--border)] p-3">
+              <summary className="flex cursor-pointer list-none items-center justify-center gap-2 text-sm font-bold text-[var(--primary)]">
+                <Pencil aria-hidden className="h-4 w-4" />
+                Editar espacio
+              </summary>
+              <form className="mt-4 space-y-3" onSubmit={(event) => editSpace(space.id, event)}>
+                <SpaceFormFields space={space} />
+                <Button className="w-full" type="submit">
+                  Guardar cambios
+                </Button>
+              </form>
+            </details>
           </Card>
         ))}
         {!spaces.length ? <EmptyState icon={Sparkles} message="No hay espacios. Crea uno para agrupar tu trabajo." /> : null}
@@ -2151,7 +2519,13 @@ function ListsView({
                         setData((current) => ({
                           ...current,
                           listItems: current.listItems.map((listItem) =>
-                            listItem.id === item.id ? { ...listItem, completed: !listItem.completed } : listItem,
+                            listItem.id === item.id
+                              ? {
+                                  ...listItem,
+                                  completed: !listItem.completed,
+                                  updatedAt: new Date().toISOString(),
+                                }
+                              : listItem,
                           ),
                         }))
                       }
@@ -2204,69 +2578,93 @@ function FocusView({
   focus,
   remainingSeconds,
   sessions,
+  tasks,
   startFocus,
   pauseFocus,
   resumeFocus,
   resetFocus,
+  timeZone,
 }: {
   focus: FocusState;
   remainingSeconds: number;
   sessions: NexoData["focusSessions"];
+  tasks: Task[];
   startFocus: (minutes: number) => void;
   pauseFocus: () => void;
   resumeFocus: () => void;
   resetFocus: () => void;
+  timeZone: string;
 }) {
+  const progress = focus.durationSeconds
+    ? Math.min(100, Math.max(0, ((focus.durationSeconds - remainingSeconds) / focus.durationSeconds) * 100))
+    : 0;
+  const todayKey = new Date().toDateString();
+  const todayMinutes = sessions
+    .filter((session) => new Date(session.completedAt).toDateString() === todayKey)
+    .reduce((total, session) => total + session.durationMinutes, 0);
+  const weekMinutes = sessions
+    .filter((session) => Date.now() - new Date(session.completedAt).getTime() <= 7 * 24 * 60 * 60 * 1000)
+    .reduce((total, session) => total + session.durationMinutes, 0);
+
   return (
-    <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
-      <Card className="grid place-items-center p-8 text-center">
-        <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted-soft)]">
-          {focus.status === "running" ? "En progreso" : focus.status === "paused" ? "Pausado" : "Listo"}
-        </p>
-        <p className="mt-6 font-display text-7xl font-bold text-[var(--primary)] sm:text-8xl">{formatTimer(remainingSeconds)}</p>
-        <div className="mt-8 flex flex-wrap justify-center gap-3">
-          {focus.status === "idle" ? (
-            <>
-              <Button onClick={() => startFocus(25)} variant="primary">
-                <Play className="h-4 w-4" />
-                25 minutos
-              </Button>
-              <Button onClick={() => startFocus(50)}>50 minutos</Button>
-            </>
-          ) : null}
-          {focus.status === "running" ? (
-            <Button onClick={pauseFocus} variant="primary">
-              <Pause className="h-4 w-4" />
-              Pausar
-            </Button>
-          ) : null}
-          {focus.status === "paused" ? (
-            <Button onClick={resumeFocus} variant="primary">
-              <Play className="h-4 w-4" />
-              Continuar
-            </Button>
-          ) : null}
-          <Button onClick={resetFocus}>
-            <RotateCcw className="h-4 w-4" />
-            Reiniciar
-          </Button>
+    <div className="mx-auto flex min-h-[calc(100svh-10rem)] w-full max-w-5xl flex-col items-center justify-between gap-8 py-4">
+      <div className="text-center">
+        <p className="text-[0.65rem] font-bold uppercase tracking-[0.16em] text-[var(--muted-soft)]">Espacio activo</p>
+        <div className="mt-2 flex flex-wrap justify-center gap-2">
+          <span className="rounded-full bg-[var(--primary-soft)] px-3 py-1 text-xs font-bold text-[var(--primary-strong)]">Programación</span>
+          <span className="rounded-full bg-[var(--surface-container)] px-3 py-1 text-xs font-semibold text-[var(--muted)]">Personal</span>
         </div>
-      </Card>
-      <Card className="p-5">
-        <CardTitle>Sesiones terminadas</CardTitle>
-        <div className="mt-4 space-y-3">
-          {sessions.length ? (
-            sessions.slice(0, 8).map((session) => (
-              <div className="nexo-inset rounded-2xl p-3" key={session.id}>
-                <p className="text-sm font-bold">{session.durationMinutes} minutos</p>
-                <p className="text-xs text-[var(--muted)]">{formatDate(session.completedAt)}</p>
+      </div>
+
+      <div className="flex flex-col items-center">
+        <div className="mb-5 flex rounded-full bg-[var(--surface-container-low)] p-1 text-xs font-semibold text-[var(--muted)] shadow-inner">
+          <button className="rounded-full bg-[var(--surface-elevated)] px-4 py-2 text-[var(--primary)] shadow-sm" onClick={() => focus.status === "idle" && startFocus(25)} type="button">25 minutos</button>
+          <button className="rounded-full px-4 py-2 hover:text-[var(--foreground)]" onClick={() => focus.status === "idle" && startFocus(50)} type="button">50 minutos</button>
+          <button className="rounded-full px-4 py-2 hover:text-[var(--foreground)]" onClick={() => focus.status === "idle" && startFocus(90)} type="button">Personalizado</button>
+        </div>
+
+        <div className="nexo-surface grid h-64 w-64 place-items-center rounded-[2.4rem] p-5 sm:h-72 sm:w-72">
+          <div
+            className="grid h-full w-full place-items-center rounded-full p-3"
+            style={{ background: `conic-gradient(var(--primary) ${Math.max(progress, 7)}%, var(--surface-container-high) 0)` }}
+          >
+            <div className="grid h-full w-full place-items-center rounded-full bg-[var(--surface)] text-center shadow-[inset_3px_3px_9px_var(--shadow-dark-soft),inset_-3px_-3px_9px_var(--shadow-light)]">
+              <div>
+                <p className="text-[0.65rem] font-bold uppercase tracking-[0.12em] text-[var(--primary)]">
+                  {focus.status === "running" ? "En curso" : focus.status === "paused" ? "Pausado" : "Listo"}
+                </p>
+                <p className="mt-2 font-display text-5xl font-bold tracking-[-0.06em] sm:text-6xl">{formatTimer(remainingSeconds)}</p>
+                <p className="mt-2 text-xs text-[var(--muted)]">Ciclo de concentración</p>
               </div>
-            ))
-          ) : (
-            <p className="text-sm text-[var(--muted)]">Completa tu primera sesión para ver historial.</p>
-          )}
+            </div>
+          </div>
         </div>
-      </Card>
+
+        <div className="mt-6 flex items-center gap-3">
+          {focus.status === "running" ? (
+            <Button onClick={pauseFocus} variant="primary"><Pause className="h-4 w-4" /> Pausar</Button>
+          ) : focus.status === "paused" ? (
+            <Button onClick={resumeFocus} variant="primary"><Play className="h-4 w-4" /> Continuar</Button>
+          ) : (
+            <Button onClick={() => startFocus(25)} variant="primary"><Play className="h-4 w-4" /> Iniciar</Button>
+          )}
+          <Button aria-label="Reiniciar temporizador" onClick={resetFocus} size="icon"><RotateCcw className="h-4 w-4" /></Button>
+        </div>
+
+        <Card className="mt-5 flex w-[min(440px,calc(100vw-2rem))] items-center gap-3 p-3">
+          <span className="nexo-inset flex h-9 w-9 items-center justify-center rounded-xl text-[var(--primary)]"><Sparkles className="h-4 w-4" /></span>
+          <div className="min-w-0 flex-1"><p className="text-[0.65rem] uppercase tracking-[0.1em] text-[var(--muted-soft)]">Enfocado en</p><p className="truncate text-sm font-bold">{tasks[0]?.title ?? "Elige una tarea para tu próxima sesión"}</p></div>
+          <Pencil className="h-4 w-4 text-[var(--muted-soft)]" />
+        </Card>
+      </div>
+
+      <div className="grid w-full gap-4 sm:grid-cols-3">
+        <Card className="p-4 text-center"><p className="text-xs text-[var(--muted)]">Tiempo hoy</p><p className="mt-1 font-display text-2xl font-bold">{Math.floor(todayMinutes / 60)}h {todayMinutes % 60}m</p></Card>
+        <Card className="p-4 text-center"><p className="text-xs text-[var(--muted)]">Esta semana</p><p className="mt-1 font-display text-2xl font-bold">{Math.floor(weekMinutes / 60)}h {weekMinutes % 60}m</p></Card>
+        <Card className="p-4 text-center"><p className="text-xs text-[var(--muted)]">Sesiones</p><p className="mt-1 font-display text-2xl font-bold text-[var(--primary)]">{sessions.length}</p><p className="text-[0.68rem] text-[var(--muted-soft)]">pomodoros listos</p></Card>
+      </div>
+
+      {sessions[0] ? <p className="text-xs text-[var(--muted-soft)]">Última sesión: {formatDate(sessions[0].completedAt, timeZone)}</p> : null}
     </div>
   );
 }
@@ -2291,19 +2689,32 @@ function SettingsView({
   onReset: () => void;
 }) {
   return (
-    <div className="space-y-6">
-      <div className="grid gap-6 xl:grid-cols-2">
+    <div className="grid gap-6 xl:grid-cols-[190px_minmax(0,1fr)_280px]">
+      <Card className="h-fit p-4 xl:sticky xl:top-24">
+        <p className="text-[0.65rem] font-bold uppercase tracking-[0.14em] text-[var(--muted-soft)]">Preferencias</p>
+        <nav className="mt-3 space-y-1" aria-label="Secciones de ajustes">
+          {["General", "Apariencia", "Cuenta & Perfil", "Notificaciones", "Módulos", "Privacidad", "Datos y almacenamiento", "PWA & Offline"].map((item) => (
+            <button className={item === "Apariencia" ? "flex w-full items-center gap-2 rounded-xl bg-[var(--primary-soft)] px-3 py-2 text-left text-xs font-bold text-[var(--primary-strong)]" : "flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-semibold text-[var(--muted)] hover:bg-[var(--surface-container-low)]"} key={item} type="button">
+              <span className="h-1.5 w-1.5 rounded-full bg-current" />{item}
+            </button>
+          ))}
+        </nav>
+        <div className="nexo-inset mt-5 rounded-2xl p-3"><p className="text-[0.65rem] text-[var(--muted-soft)]">Almacenamiento local</p><div className="mt-2 h-1.5 rounded-full bg-[var(--surface-container-high)]"><div className="h-full w-[68%] rounded-full bg-[var(--primary)]" /></div><p className="mt-2 text-[0.65rem] font-bold">68% utilizado</p></div>
+      </Card>
+
+      <div className="space-y-6">
+        <div><p className="text-[0.65rem] font-bold uppercase tracking-[0.14em] text-[var(--muted-soft)]">Configuración del sistema</p><h2 className="mt-1 font-display text-2xl font-bold">Personalización y Apariencia</h2><p className="mt-1 text-sm text-[var(--muted)]">Ajusta el motor táctil neumórfico, la paleta cromática y tus módulos.</p></div>
         <Card className="p-5">
           <CardHeader>
             <div>
-              <CardTitle>Apariencia</CardTitle>
-              <CardDescription>Preferencias visuales guardadas en tu cuenta.</CardDescription>
+              <CardTitle>Selector de Tema</CardTitle>
+              <CardDescription>Elige el comportamiento de iluminación neumórfica.</CardDescription>
             </div>
           </CardHeader>
           <div className="mt-5 space-y-5">
             <div>
               <p className="mb-2 text-sm font-bold">Tema</p>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 gap-3">
                 {(["light", "dark", "system"] as const).map((theme) => (
                   <Button
                     aria-pressed={settings.theme === theme}
@@ -2311,8 +2722,8 @@ function SettingsView({
                     onClick={() => updateTheme(theme)}
                     variant={settings.theme === theme ? "primary" : "secondary"}
                   >
-                    {theme === "light" ? <Sun className="h-4 w-4" /> : theme === "dark" ? <Moon className="h-4 w-4" /> : null}
-                    {theme === "light" ? "Claro" : theme === "dark" ? "Oscuro" : "Sistema"}
+                    {theme === "light" ? <Sun className="h-4 w-4" /> : theme === "dark" ? <Moon className="h-4 w-4" /> : <Settings className="h-4 w-4" />}
+                    {theme === "light" ? "Light mode" : theme === "dark" ? "Dark mode" : "System mode"}
                   </Button>
                 ))}
               </div>
@@ -2347,11 +2758,10 @@ function SettingsView({
             </div>
           </div>
         </Card>
-
         <Card className="p-5">
           <CardHeader>
             <div>
-              <CardTitle>Módulos</CardTitle>
+              <CardTitle>Módulos activos</CardTitle>
               <CardDescription>{activeModules} módulos activos. Desactivar no borra datos.</CardDescription>
             </div>
           </CardHeader>
@@ -2388,9 +2798,7 @@ function SettingsView({
               })}
           </div>
         </Card>
-      </div>
-
-      <Card className="p-5">
+        <Card className="p-5">
         <CardHeader>
           <div>
             <CardTitle>Datos del workspace</CardTitle>
@@ -2401,7 +2809,20 @@ function SettingsView({
             Vaciar workspace
           </Button>
         </CardHeader>
-      </Card>
+        </Card>
+      </div>
+
+      <div className="space-y-5">
+        <Card className="p-5 xl:sticky xl:top-24">
+          <div className="flex items-center justify-between"><CardTitle>Live Preview</CardTitle><span className="rounded-full bg-[var(--primary-soft)] px-2 py-1 text-[0.6rem] font-bold text-[var(--primary-strong)]">CSS Dinámico</span></div>
+          <div className="nexo-inset mt-5 rounded-2xl p-4">
+            <div className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-full bg-[var(--primary)] text-xs font-bold text-white">N</span><div><p className="text-xs font-bold">Target Component</p><p className="text-[0.65rem] text-[var(--muted)]">Componente de muestra</p></div></div>
+            <Input className="mt-4" placeholder="Input neumórfico interactivo" />
+            <div className="mt-4 grid grid-cols-2 gap-2"><Button variant="primary">Botón primario</Button><Button>Neumórfico</Button></div>
+          </div>
+          <div className="mt-5 space-y-3 text-xs"><div className="flex justify-between"><span className="text-[var(--muted)]">Radio de bordes</span><strong>20px</strong></div><div className="flex justify-between"><span className="text-[var(--muted)]">Elevación</span><strong>Media</strong></div><div className="flex justify-between"><span className="text-[var(--muted)]">Densidad</span><strong>Estándar</strong></div></div>
+        </Card>
+      </div>
     </div>
   );
 }

@@ -26,7 +26,7 @@ export default async function RegisterPage({
         </>
       }
       message={message}
-      socialLayout="split"
+      socialDivider="o regístrate con tu correo"
       subtitle="Empieza a organizar tus notas, tareas, archivos y espacios con calma."
       title="Crea tu cuenta en Nexo"
     >
@@ -40,10 +40,20 @@ export default async function RegisterPage({
         </label>
         <EmailField />
         <PasswordField autoComplete="new-password" />
-        <label className="flex items-start gap-2 text-xs leading-5 text-[var(--muted)]" htmlFor="terms">
+        <div className="flex items-start gap-2 text-xs leading-5 text-[var(--muted)]">
           <input className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--primary)]" id="terms" name="terms" required type="checkbox" />
-          <span>Acepto los términos de servicio y la política de privacidad de Nexo.</span>
-        </label>
+          <label htmlFor="terms">
+            Acepto los{" "}
+            <Link className="font-bold text-[var(--primary)] underline underline-offset-2" href="/terminos" rel="noreferrer" target="_blank">
+              términos de servicio
+            </Link>{" "}
+            y la{" "}
+            <Link className="font-bold text-[var(--primary)] underline underline-offset-2" href="/privacidad" rel="noreferrer" target="_blank">
+              política de privacidad
+            </Link>{" "}
+            de Nexo.
+          </label>
+        </div>
         <Button className="w-full rounded-xl" type="submit" variant="primary">
           Crear cuenta gratis
           <ArrowRight aria-hidden className="h-4 w-4" />

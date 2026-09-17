@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Camera, CheckCircle2, KeyRound, Save, ShieldCheck, UserRound } from "lucide-react";
+import { Camera, KeyRound, Save, ShieldCheck, UserRound } from "lucide-react";
 
 import { saveProfile } from "@/app/auth/actions";
 import type { WorkspaceUser } from "@/components/layout/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { StatusMessage } from "@/components/ui/status-message";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 const timezoneOptions = [
@@ -253,22 +254,6 @@ function Avatar({ name, url }: { name: string; url: string | null }) {
       style={url ? { backgroundImage: `url("${url.replaceAll('"', "%22")}")` } : undefined}
     >
       {url ? <span className="sr-only">{name}</span> : initials || "NX"}
-    </div>
-  );
-}
-
-function StatusMessage({ tone, text }: { tone: "success" | "error"; text: string }) {
-  return (
-    <div
-      className={
-        tone === "success"
-          ? "flex items-center gap-2 rounded-xl bg-[color-mix(in_srgb,#059669_12%,var(--surface))] p-3 text-sm font-semibold text-[#047857]"
-          : "rounded-xl bg-[var(--danger-soft)] p-3 text-sm font-semibold text-[var(--danger)]"
-      }
-      role="status"
-    >
-      {tone === "success" ? <CheckCircle2 aria-hidden className="h-4 w-4" /> : null}
-      {text}
     </div>
   );
 }

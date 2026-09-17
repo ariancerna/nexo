@@ -26,6 +26,7 @@ export const defaultNexoData: NexoData = {
       "saved",
       "lists",
       "focus",
+      "profile",
       "settings",
     ],
     readNotificationIds: [],
@@ -33,14 +34,18 @@ export const defaultNexoData: NexoData = {
   },
 };
 
-export function createId(_prefix: string) {
-  void _prefix;
-
+export function createUuid() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
   }
 
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (char) =>
+    (Number(char) ^ ((Math.random() * 16) >> (Number(char) / 4))).toString(16),
+  );
+}
+
+export function createId() {
+  return createUuid();
 }
 
 export function formatBytes(bytes: number) {

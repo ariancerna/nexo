@@ -5,6 +5,7 @@ import {
   accountLinkRoute,
   dashboardRoute,
   getConfirmedOAuthProviders,
+  oauthProviders,
   userHasLinkedProvider,
 } from "@/lib/auth/account-linking";
 import { authRoutes } from "@/lib/auth/routes";
@@ -31,11 +32,15 @@ export default async function DashboardPage() {
     redirect(authRoutes.onboarding);
   }
 
-  if (
-    userHasLinkedProvider(userData.user, "google") &&
-    !getConfirmedOAuthProviders(settings?.preferences).includes("google")
-  ) {
-    redirect(`${accountLinkRoute}?next=${encodeURIComponent(dashboardRoute)}`);
+  const confirmedProviders = getConfirmedOAuthProviders(settings?.preferences);
+  const unconfirmedProvider = oauthProviders.find(
+    (provider) => userHasLinkedProvider(userData.user, provider) && !confirmedProviders.includes(provider),
+  );
+
+  if (unconfirmedProvider) {
+    redirect(
+      `${accountLinkRoute}?next=${encodeURIComponent(dashboardRoute)}&provider=${encodeURIComponent(unconfirmedProvider)}`,
+    );
   }
 
   const avatarResult = profile.avatar_url

@@ -32,7 +32,7 @@ export default async function ForgotPasswordPage({
         </Button>
         <div className="flex gap-3 rounded-xl bg-[var(--surface-container-low)] p-4 text-xs leading-5 text-[var(--muted)]">
           <Info aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-[var(--primary)]" />
-          Si creaste tu cuenta con Google o Microsoft, puedes iniciar sesión directamente con ese proveedor.
+          Si creaste tu cuenta con Google, puedes iniciar sesión directamente con ese proveedor.
         </div>
       </form>
     </AuthCard>

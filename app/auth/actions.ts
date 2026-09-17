@@ -6,6 +6,8 @@ import { redirect } from "next/navigation";
 import { authRoutes } from "@/lib/auth/routes";
 import {
   dashboardRoute,
+  isOAuthProvider,
+  oauthProviderLabel,
   safeInternalPath,
   withConfirmedOAuthProvider,
 } from "@/lib/auth/account-linking";
@@ -16,8 +18,11 @@ function authRedirect(path: string, message: string): never {
   redirect(`${path}?message=${encodeURIComponent(message)}`);
 }
 
-function accountLinkRedirect(message: string, next: string): never {
-  redirect(`${authRoutes.linkAccount}?message=${encodeURIComponent(message)}&next=${encodeURIComponent(next)}`);
+function accountLinkRedirect(message: string, next: string, provider?: string): never {
+  const providerQuery = provider ? `&provider=${encodeURIComponent(provider)}` : "";
+  redirect(
+    `${authRoutes.linkAccount}?message=${encodeURIComponent(message)}&next=${encodeURIComponent(next)}${providerQuery}`,
+  );
 }
 
 function requireBackend() {
@@ -29,19 +34,6 @@ function requireBackend() {
 async function getSiteUrl() {
   const headersList = await headers();
   return process.env.NEXT_PUBLIC_SITE_URL ?? headersList.get("origin") ?? "http://localhost:3000";
-}
-
-async function providerEndpointIsReady(providerUrl: string) {
-  try {
-    const response = await fetch(providerUrl, {
-      cache: "no-store",
-      redirect: "manual",
-    });
-
-    return response.status < 400;
-  } catch {
-    return true;
-  }
 }
 
 export async function signInWithPassword(formData: FormData) {
@@ -108,40 +100,25 @@ export async function signUpWithPassword(formData: FormData) {
   authRedirect(authRoutes.login, "Cuenta creada. Revisa tu correo para confirmar el acceso.");
 }
 
-async function signInWithProvider(provider: "google" | "azure", label: "Google" | "Microsoft") {
+export async function signInWithGoogle() {
   requireBackend();
 
   const siteUrl = await getSiteUrl();
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.signInWithOAuth({
-    provider,
+    provider: "google",
     options: {
-      redirectTo: `${siteUrl}/auth/callback?next=/onboarding&provider=${provider}`,
-      scopes: provider === "azure" ? "email" : undefined,
+      redirectTo: `${siteUrl}/auth/callback?next=/onboarding&provider=google`,
     },
   });
 
   const providerUrl = data.url;
 
   if (error || !providerUrl) {
-    authRedirect(authRoutes.login, `No pudimos iniciar sesión con ${label}. Inténtalo nuevamente.`);
-  }
-
-  const providerReady = await providerEndpointIsReady(providerUrl);
-
-  if (!providerReady) {
-    authRedirect(authRoutes.login, `El acceso con ${label} todavía no está habilitado.`);
+    authRedirect(authRoutes.login, "No pudimos iniciar sesión con Google. Inténtalo nuevamente.");
   }
 
   redirect(providerUrl);
-}
-
-export async function signInWithGoogle() {
-  return signInWithProvider("google", "Google");
-}
-
-export async function signInWithMicrosoft() {
-  return signInWithProvider("azure", "Microsoft");
 }
 
 export async function sendPasswordReset(formData: FormData) {
@@ -199,10 +176,14 @@ export async function signOut() {
   redirect(authRoutes.login);
 }
 
-export async function confirmGoogleAccountLink(formData: FormData) {
+export async function confirmOAuthAccountLink(formData: FormData) {
   requireBackend();
 
   const next = safeInternalPath(formData.get("next"));
+  const providerValue = String(formData.get("provider") ?? "");
+  if (!isOAuthProvider(providerValue)) {
+    accountLinkRedirect("El proveedor de acceso no es válido.", next);
+  }
   const supabase = await createSupabaseServerClient();
   const { data: userData, error: userError } = await supabase.auth.getUser();
 
@@ -218,41 +199,47 @@ export async function confirmGoogleAccountLink(formData: FormData) {
   const { error } = await supabase.from("user_settings").upsert(
     {
       user_id: userData.user.id,
-      preferences: withConfirmedOAuthProvider(settings?.preferences, "google"),
+      preferences: withConfirmedOAuthProvider(settings?.preferences, providerValue),
     },
     { onConflict: "user_id" },
   );
 
   if (error) {
-    accountLinkRedirect("No pudimos guardar tu elección. Inténtalo nuevamente.", next);
+    accountLinkRedirect("No pudimos guardar tu elección. Inténtalo nuevamente.", next, providerValue);
   }
 
   redirect(next);
 }
 
-export async function cancelGoogleAccountLink(formData: FormData) {
+export async function cancelOAuthAccountLink(formData: FormData) {
   requireBackend();
 
   const next = safeInternalPath(formData.get("next"));
+  const providerValue = String(formData.get("provider") ?? "");
+  if (!isOAuthProvider(providerValue)) {
+    accountLinkRedirect("El proveedor de acceso no es válido.", next);
+  }
+  const providerLabel = oauthProviderLabel(providerValue);
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.getUserIdentities();
-  const googleIdentity = data?.identities.find((identity) => identity.provider === "google");
+  const oauthIdentity = data?.identities.find((identity) => identity.provider === providerValue);
 
-  if (error || !googleIdentity) {
-    accountLinkRedirect("No encontramos una identidad de Google para desvincular.", next);
+  if (error || !oauthIdentity) {
+    accountLinkRedirect(`No encontramos una identidad de ${providerLabel} para desvincular.`, next, providerValue);
   }
 
-  const { error: unlinkError } = await supabase.auth.unlinkIdentity(googleIdentity);
+  const { error: unlinkError } = await supabase.auth.unlinkIdentity(oauthIdentity);
 
   if (unlinkError) {
     accountLinkRedirect(
-      "No pudimos desvincular Google en este momento. Google sigue vinculado; puedes conservar ese acceso o contactar a soporte.",
+      `No pudimos desvincular ${providerLabel} en este momento. El acceso sigue vinculado; puedes conservarlo o contactar a soporte.`,
       next,
+      providerValue,
     );
   }
 
   await supabase.auth.signOut();
-  authRedirect(authRoutes.login, "Google no fue vinculado. Puedes entrar con tu correo y contraseña.");
+  authRedirect(authRoutes.login, `${providerLabel} no fue vinculado. Puedes entrar con tu correo y contraseña.`);
 }
 
 export type ProfileUpdateResult =

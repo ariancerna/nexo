@@ -35,7 +35,7 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ```
 
-Google and Microsoft OAuth credentials belong in the provider configuration of the authentication dashboard, never in a public browser environment variable.
+Google OAuth credentials belong in the provider configuration of the authentication dashboard, never in a public browser environment variable.
 
 To let users reject and undo an automatically linked Google identity, enable **Authentication > Sign In / Providers > Allow manual linking** in Supabase. Supabase requires this setting for `unlinkIdentity()`.
 
@@ -62,14 +62,12 @@ npm run test:e2e
 
 ## Current Functionality
 
-- Password, Google, and Microsoft-ready authentication flows with onboarding, password recovery, and existing-account linking consent.
+- Password and Google authentication flows with onboarding, password recovery, and existing-account linking consent.
 - Cloud-synced CRUD for notes, tasks, spaces, events, saved links, lists, and private files.
 - Focus timer with pause, resume, reset, and completed-session history.
 - Global search across workspace data.
 - Light, dark, and system themes with configurable accent colors and enabled modules.
 - Responsive workspace, installable PWA metadata, and an offline fallback.
-
-Microsoft sign-in requires an Azure/Entra application to be connected and enabled in the authentication provider settings. Until that external configuration exists, Nexo returns a controlled availability message instead of a raw provider error.
 
 ## Project Structure
 

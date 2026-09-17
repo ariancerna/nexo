@@ -3,6 +3,7 @@
 import { Bell, CalendarDays, Check, CheckCircle2, Clock3, Link2, Timer } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { dateInputValueInTimeZone, formatNexoDate } from "@/lib/nexo/date";
 import type { ModuleKey, NexoData } from "@/types/nexo";
 
 export type WorkspaceNotification = {
@@ -15,9 +16,9 @@ export type WorkspaceNotification = {
   kind: "task" | "event" | "focus" | "saved";
 };
 
-export function buildWorkspaceNotifications(data: NexoData, now = new Date()): WorkspaceNotification[] {
+export function buildWorkspaceNotifications(data: NexoData, now = new Date(), timeZone?: string): WorkspaceNotification[] {
   const notifications: WorkspaceNotification[] = [];
-  const today = now.toISOString().slice(0, 10);
+  const today = dateInputValueInTimeZone(now, timeZone);
   const nowTime = now.getTime();
 
   for (const task of data.tasks) {
@@ -92,12 +93,14 @@ export function NotificationsPanel({
   onRead,
   onReadAll,
   onOpen,
+  timeZone,
 }: {
   notifications: WorkspaceNotification[];
   readIds: string[];
   onRead: (id: string) => void;
   onReadAll: () => void;
   onOpen: (notification: WorkspaceNotification) => void;
+  timeZone?: string;
 }) {
   const readSet = new Set(readIds);
   const unreadCount = notifications.filter((notification) => !readSet.has(notification.id)).length;
@@ -152,7 +155,7 @@ export function NotificationsPanel({
                   <span className="mt-1 block text-xs leading-5 text-[var(--muted)]">{notification.description}</span>
                   <span className="mt-1 flex items-center gap-1 text-[0.68rem] text-[var(--muted-soft)]">
                     <Clock3 aria-hidden className="h-3 w-3" />
-                    {formatNotificationDate(notification.timestamp)}
+                    {formatNexoDate(notification.timestamp, timeZone)}
                   </span>
                 </span>
               </button>
@@ -179,8 +182,4 @@ function notificationIcon(kind: WorkspaceNotification["kind"]) {
   if (kind === "event") return CalendarDays;
   if (kind === "focus") return Timer;
   return Link2;
-}
-
-function formatNotificationDate(value: string) {
-  return new Intl.DateTimeFormat("es", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }

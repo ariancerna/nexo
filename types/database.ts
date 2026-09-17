@@ -154,63 +154,10 @@ export type Database = {
         } & TimestampUpdate;
         Relationships: [];
       };
-      subtasks: {
-        Row: {
-          id: string;
-          task_id: string;
-          user_id: string;
-          title: string;
-          completed: boolean;
-          position: number;
-        } & TimestampColumns;
-        Insert: {
-          id?: string;
-          task_id: string;
-          user_id: string;
-          title: string;
-          completed?: boolean;
-          position?: number;
-        } & TimestampInsert;
-        Update: {
-          title?: string;
-          completed?: boolean;
-          position?: number;
-        } & TimestampUpdate;
-        Relationships: [];
-      };
-      folders: {
-        Row: {
-          id: string;
-          user_id: string;
-          space_id: string | null;
-          parent_id: string | null;
-          name: string;
-          is_favorite: boolean;
-          is_trashed: boolean;
-        } & TimestampColumns;
-        Insert: {
-          id?: string;
-          user_id: string;
-          space_id?: string | null;
-          parent_id?: string | null;
-          name: string;
-          is_favorite?: boolean;
-          is_trashed?: boolean;
-        } & TimestampInsert;
-        Update: {
-          space_id?: string | null;
-          parent_id?: string | null;
-          name?: string;
-          is_favorite?: boolean;
-          is_trashed?: boolean;
-        } & TimestampUpdate;
-        Relationships: [];
-      };
       files: {
         Row: {
           id: string;
           user_id: string;
-          folder_id: string | null;
           space_id: string | null;
           storage_path: string;
           filename: string;
@@ -223,7 +170,6 @@ export type Database = {
         Insert: {
           id?: string;
           user_id: string;
-          folder_id?: string | null;
           space_id?: string | null;
           storage_path: string;
           filename: string;
@@ -234,7 +180,6 @@ export type Database = {
           is_trashed?: boolean;
         } & TimestampInsert;
         Update: {
-          folder_id?: string | null;
           space_id?: string | null;
           storage_path?: string;
           filename?: string;

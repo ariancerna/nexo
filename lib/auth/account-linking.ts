@@ -4,6 +4,17 @@ import type { Json } from "@/types/database";
 
 export const accountLinkRoute = "/link-account";
 export const dashboardRoute = "/dashboard";
+export const oauthProviders = ["google"] as const;
+export type OAuthProvider = (typeof oauthProviders)[number];
+
+export function isOAuthProvider(value: string | null | undefined): value is OAuthProvider {
+  return oauthProviders.includes(value as OAuthProvider);
+}
+
+export function oauthProviderLabel(provider: OAuthProvider) {
+  const labels: Record<OAuthProvider, string> = { google: "Google" };
+  return labels[provider];
+}
 
 export function safeInternalPath(value: FormDataEntryValue | string | null | undefined, fallback = dashboardRoute) {
   const path = typeof value === "string" ? value : "";
